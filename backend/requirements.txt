@@ -1,0 +1,50 @@
+# CareerVerse AI — Python dependencies
+# Install: pip install -r requirements.txt
+
+# Web framework
+fastapi>=0.115.0,<1.0.0
+uvicorn[standard]>=0.32.0,<1.0.0
+python-multipart>=0.0.12,<1.0.0
+
+# Configuration & validation
+pydantic-settings>=2.6.0,<3.0.0
+python-dotenv>=1.0.0,<2.0.0
+# email-validator: required by Pydantic's EmailStr, used on the signup/login schemas
+email-validator>=2.2.0,<3.0.0
+
+# Database (PostgreSQL + migrations)
+sqlalchemy>=2.0.36,<3.0.0
+alembic>=1.14.0,<2.0.0
+psycopg2-binary>=2.9.10,<3.0.0
+
+# Authentication
+python-jose[cryptography]>=3.3.0,<4.0.0
+passlib[bcrypt]>=1.7.4,<2.0.0
+# passlib 1.7.4 is incompatible with bcrypt>=4.1 (its startup self-test crashes
+# on newer bcrypt's stricter 72-byte input check) — pin below that until passlib
+# ships a fix.
+bcrypt>=4.0.0,<4.1.0
+# google-auth: Google's official library for verifying "Sign in with Google"
+# ID tokens server-side (signature/audience/expiry) — required so we never
+# trust a Google credential without checking it against Google's public keys.
+google-auth>=2.35.0,<3.0.0
+# requests: transport dependency google-auth needs to fetch Google's public
+# signing keys during verification.
+requests>=2.32.0,<3.0.0
+
+# AI & embeddings
+openai>=1.57.0,<2.0.0
+
+# Vector database (RAG)
+# Note: On Windows, ChromaDB may require Microsoft C++ Build Tools to compile chroma-hnswlib.
+chromadb>=0.5.23,<1.0.0
+
+# PDF parsing
+pymupdf>=1.25.0,<2.0.0
+
+# HTTP client (Supabase Storage, external APIs)
+httpx>=0.28.0,<1.0.0
+
+# Dev & testing
+pytest>=8.3.0,<9.0.0
+pytest-asyncio>=0.24.0,<1.0.0

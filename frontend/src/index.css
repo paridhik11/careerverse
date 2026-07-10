@@ -1,0 +1,184 @@
+@import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..500&family=Manrope:wght@400;500;600;700&display=swap");
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+/* ─── CareerVerse Design Tokens ─────────────────────────────────────────────
+   Namespaced --cv-* so they coexist with shadcn tokens without collision.
+   ────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Layout */
+  --cv-sidebar-width: 220px;
+  --cv-radius-card: 1.25rem;   /* 20px — journey cards */
+  --cv-radius-main: 1.5rem;    /* 24px — main content shell */
+  --cv-radius-chip: 9999px;    /* pill chips */
+
+  /* Core palette */
+  --cv-sidebar:        #1E2028;
+  --cv-sidebar-text:   #C8CAD4;
+  --cv-sidebar-active: #FFFFFF;
+  --cv-bg:             #EDEAE3;
+  --cv-accent:         #6B7FFF;
+  --cv-accent-muted:   #6B7FFF26; /* accent at ~15% opacity */
+
+  /* Pastel card surfaces */
+  --cv-card-amber:     #FEF2BF;
+  --cv-card-amber-icon:#F6DC6D;
+  --cv-card-sage:      #D4EDD8;
+  --cv-card-sage-icon: #9DD4A8;
+  --cv-card-sky:       #D5E8F8;
+  --cv-card-sky-icon:  #93C6ED;
+  --cv-card-lavender:  #E7DDF8;
+  --cv-card-lavender-icon: #C5A8EF;
+
+  /* Status chip colors */
+  --cv-status-ready:      #6B7FFF;
+  --cv-status-progress:   #F59E0B;
+  --cv-status-locked:     #9CA3AF;
+
+  /* Typography families */
+  --cv-font-serif: "Fraunces", Georgia, serif;
+  --cv-font-sans:  "Manrope", system-ui, sans-serif;
+
+  /* Type scale */
+  --cv-text-display:  clamp(2.5rem, 5vw, 3rem);
+  --cv-text-h1:       2.25rem;
+  --cv-text-h2:       1.75rem;
+  --cv-text-h3:       1.25rem;
+  --cv-text-body:     1rem;
+  --cv-text-small:    0.875rem;
+  --cv-text-caption:  0.75rem;
+
+  /* Spacing rhythm (8px base) */
+  --cv-space-1: 0.5rem;
+  --cv-space-2: 1rem;
+  --cv-space-3: 1.5rem;
+  --cv-space-4: 2rem;
+  --cv-space-6: 3rem;
+
+  /* Elevation */
+  --cv-shadow-card: 0 2px 8px 0 rgb(0 0 0 / 0.06);
+  --cv-shadow-main: 0 8px 32px 0 rgb(0 0 0 / 0.10);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--cv-font-sans);
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--cv-font-serif);
+  }
+}
