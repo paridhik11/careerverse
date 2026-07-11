@@ -5,40 +5,30 @@ import { type ColorVariant } from "@/components/JourneyCard"
 /*
  * FeatureCard — landing page marketing card
  *
- * Why this is NOT JourneyCard:
- * JourneyCard carries a status chip (Ready / In Progress / Locked) that
- * represents where a signed-in user is in their personal journey. That chip
- * is meaningless — and visually confusing — on a public marketing page where
- * no user session exists. FeatureCard shares the same visual DNA (pastel
- * surface, serif title, icon circle) but replaces the chip with a plain
- * one-line description, communicating what the feature does rather than its
- * current state.
+ * Shares JourneyCard visual DNA (pastel surface, serif title, icon circle)
+ * without status chips — those belong to the signed-in journey UI.
  */
 
-/* ─── Token maps (mirrored from JourneyCard) ─────────────────────────────── */
-
 const cardBg: Record<ColorVariant, string> = {
-  amber:    "bg-[#FEF2BF]",
-  sage:     "bg-[#D4EDD8]",
-  sky:      "bg-[#D5E8F8]",
-  lavender: "bg-[#E7DDF8]",
+  amber: "bg-[#FEF2BF]",
+  sage: "bg-[#D4EDD8]",
+  sky: "bg-[#D5E8F8]",
+  lavender: "bg-[#EDE4FF]",
 }
 
 const iconBg: Record<ColorVariant, string> = {
-  amber:    "bg-[#F6DC6D]",
-  sage:     "bg-[#9DD4A8]",
-  sky:      "bg-[#93C6ED]",
-  lavender: "bg-[#C5A8EF]",
+  amber: "bg-[#F6DC6D]",
+  sage: "bg-[#9DD4A8]",
+  sky: "bg-[#93C6ED]",
+  lavender: "bg-[#C4B5FD]",
 }
 
 const iconColor: Record<ColorVariant, string> = {
-  amber:    "text-amber-800",
-  sage:     "text-green-800",
-  sky:      "text-sky-800",
+  amber: "text-amber-800",
+  sage: "text-green-800",
+  sky: "text-sky-800",
   lavender: "text-purple-800",
 }
-
-/* ─── Props ──────────────────────────────────────────────────────────────── */
 
 export interface FeatureCardProps {
   title: string
@@ -47,8 +37,6 @@ export interface FeatureCardProps {
   icon: LucideIcon
   className?: string
 }
-
-/* ─── Component ──────────────────────────────────────────────────────────── */
 
 export function FeatureCard({
   title,
@@ -60,33 +48,28 @@ export function FeatureCard({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 rounded-[1.25rem] p-5",
-        "shadow-[0_2px_8px_0_rgb(0_0_0/0.06)]",
-        "transition-shadow duration-200 hover:shadow-[0_4px_16px_0_rgb(0_0_0/0.10)]",
+        "flex h-full flex-col gap-3 rounded-[var(--cv-radius-card)] p-5",
+        "shadow-[var(--cv-shadow-card)]",
+        "transition-shadow duration-200 hover:shadow-[0_8px_24px_0_rgb(17_24_39/0.10)]",
         cardBg[colorVariant],
         className,
       )}
     >
-      {/* Icon circle */}
       <div
         className={cn(
           "flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
           iconBg[colorVariant],
         )}
       >
-        <Icon
-          className={cn("h-5 w-5", iconColor[colorVariant])}
-          strokeWidth={1.8}
-        />
+        <Icon className={cn("h-5 w-5", iconColor[colorVariant])} strokeWidth={1.8} />
       </div>
 
-      {/* Text */}
       <div className="flex flex-col gap-1">
         <span
           className="leading-snug text-gray-900"
           style={{
             fontFamily: "var(--cv-font-serif)",
-            fontSize:   "var(--cv-text-h3)",
+            fontSize: "var(--cv-text-h3)",
             fontWeight: 500,
           }}
         >
@@ -95,9 +78,9 @@ export function FeatureCard({
         <span
           className="text-gray-600"
           style={{
-            fontFamily:  "var(--cv-font-sans)",
-            fontSize:    "var(--cv-text-small)",
-            lineHeight:  1.5,
+            fontFamily: "var(--cv-font-sans)",
+            fontSize: "var(--cv-text-small)",
+            lineHeight: 1.5,
           }}
         >
           {description}
