@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth import router as auth_router
+from app.api.career_mentor import router as career_mentor_router
 from app.api.job_descriptions import router as job_descriptions_router
 from app.api.job_matches import router as job_matches_router
 from app.api.job_simulations import router as job_simulations_router
@@ -15,6 +16,7 @@ from app.models import job_description as _job_description_model  # noqa: F401 �
 from app.models import job_match as _job_match_model  # noqa: F401 — registers JobMatch on Base.metadata
 from app.models import job_simulation as _job_simulation_model  # noqa: F401 — registers JobSimulation on Base.metadata
 from app.models import learning_roadmap as _learning_roadmap_model  # noqa: F401 — registers LearningRoadmap on Base.metadata
+from app.models import mentor_message as _mentor_message_model  # noqa: F401 — registers MentorMessage on Base.metadata
 from app.models import report as _report_model  # noqa: F401 — registers Report on Base.metadata
 from app.models import resume as _resume_model  # noqa: F401 — registers Resume on Base.metadata
 from app.models import skill_gap as _skill_gap_model  # noqa: F401 — registers SkillGap on Base.metadata
@@ -48,6 +50,7 @@ app.include_router(job_matches_router)
 app.include_router(job_simulations_router)
 app.include_router(skill_gap_router)
 app.include_router(learning_roadmap_router)
+app.include_router(career_mentor_router)
 
 
 @app.get("/health", tags=["health"])

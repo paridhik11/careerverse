@@ -278,3 +278,27 @@ export type LearningRoadmapState = {
   match: JobMatch
   resumeId: number
 }
+
+/* ─── Career Mentor Chatbot ─────────────────────────────────────────────── */
+
+export type MentorMessageRole = "user" | "assistant"
+
+/** One persisted message in the Career Mentor conversation. */
+export type MentorMessageRecord = {
+  id: number
+  resume_id: number
+  role: MentorMessageRole
+  content: string
+  created_at: string
+}
+
+/** Returned by GET /career-mentor/history/{resume_id}. */
+export type MentorHistoryResponse = {
+  messages: MentorMessageRecord[]
+}
+
+/** Request body for POST /career-mentor/chat. */
+export type MentorChatRequest = {
+  resume_id: number
+  message: string
+}

@@ -17,6 +17,11 @@ export function getApiBaseUrl(): string {
 // read the token at all.
 export const AUTH_TOKEN_STORAGE_KEY = "careerverse_auth_token"
 
+// Stores the most recently active resume id so the Career Mentor sidebar can
+// restore context across page navigations without requiring a prop-drill or
+// route param on every page.
+export const RESUME_ID_STORAGE_KEY = "careerverse_resume_id"
+
 export class ApiError extends Error {
   status: number
 
