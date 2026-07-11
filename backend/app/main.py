@@ -3,11 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth import router as auth_router
 from app.api.job_descriptions import router as job_descriptions_router
+from app.api.job_matches import router as job_matches_router
 from app.api.resume import router as resume_router
 from app.api.resume_review import router as resume_review_router
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.models import job_description as _job_description_model  # noqa: F401 — registers JobDescription
+from app.models import job_match as _job_match_model  # noqa: F401 — registers JobMatch on Base.metadata
 from app.models import report as _report_model  # noqa: F401 — registers Report on Base.metadata
 from app.models import resume as _resume_model  # noqa: F401 — registers Resume on Base.metadata
 from app.models import user as _user_model  # noqa: F401 — registers User on Base.metadata
@@ -36,6 +38,7 @@ app.include_router(auth_router)
 app.include_router(resume_router)
 app.include_router(resume_review_router)
 app.include_router(job_descriptions_router)
+app.include_router(job_matches_router)
 
 
 @app.get("/health", tags=["health"])

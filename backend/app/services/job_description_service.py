@@ -123,6 +123,16 @@ def _store_file(original_name: str, file_type: str, payload: bytes) -> Path:
     return destination
 
 
+def get_job_description_by_id(db: Session, job_description_id: int) -> JobDescription | None:
+    """Fetch a persisted job description by its primary key, or `None` if it doesn't exist.
+
+    Used by the Career Recommendation flow to keep `JobDescription.parsed_text`
+    retrievable by id for downstream agents (e.g. the Job Simulation Agent)
+    without re-parsing the original file.
+    """
+    return db.query(JobDescription).filter(JobDescription.id == job_description_id).first()
+
+
 def _ensure_not_duplicate(db: Session, digest: str, filename: str) -> None:
     existing = (
         db.query(JobDescription).filter(JobDescription.content_hash == digest).first()

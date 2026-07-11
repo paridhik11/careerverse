@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom"
 import { PrivateRoute } from "@/components/PrivateRoute"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { DashboardPage } from "@/pages/Dashboard"
+import { JobDescriptionUploadPage } from "@/pages/JobDescriptionUpload"
 import { LandingPage } from "@/pages/LandingPage"
 import { LoginPage } from "@/pages/Login"
 import { ResumeReportPage } from "@/pages/ResumeReport"
@@ -38,6 +39,15 @@ export function App() {
           element={
             <PrivateRoute>
               <ResumeReportPage />
+            </PrivateRoute>
+          }
+        />
+        {/* Career Recommendation flow — upload job descriptions → Top 3 matches */}
+        <Route
+          path="/job-descriptions/upload"
+          element={
+            <PrivateRoute>
+              <JobDescriptionUploadPage />
             </PrivateRoute>
           }
         />

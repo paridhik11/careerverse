@@ -26,7 +26,9 @@ import { motion } from "framer-motion"
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   BarChart2,
+  Briefcase,
   CheckCircle2,
   FileText,
   Lightbulb,
@@ -194,7 +196,7 @@ export function ResumeReportPage() {
     return <MissingReportState />
   }
 
-  const { report, fileName, reviewedAt } = state
+  const { report, fileName, reviewedAt, resumeId } = state
   const {
     overall_score,
     ats_score,
@@ -514,6 +516,50 @@ export function ResumeReportPage() {
             </div>
           </Section>
         )}
+
+        {/* ── 8. Next step CTA — find career matches from job descriptions ── */}
+        <Section className="text-center" style={{ background: "var(--cv-card-sage)" }}>
+          <div
+            className="mx-auto mb-4 flex size-11 items-center justify-center rounded-full"
+            style={{ background: "var(--cv-card-sage-icon)" }}
+            aria-hidden
+          >
+            <Briefcase size={20} strokeWidth={1.8} color="#111827" />
+          </div>
+          <h2
+            style={{
+              fontFamily: "var(--cv-font-serif)",
+              fontSize: "var(--cv-text-h3)",
+              fontWeight: 500,
+              color: "#111827",
+            }}
+          >
+            Ready for the next step?
+          </h2>
+          <p
+            className="mx-auto mt-2 max-w-md text-gray-600"
+            style={{
+              fontFamily: "var(--cv-font-sans)",
+              fontSize: "var(--cv-text-small)",
+              lineHeight: 1.6,
+            }}
+          >
+            We've analyzed your resume. Now upload one or more Job Descriptions
+            so CareerVerse can compare your resume against real job
+            opportunities and recommend your Top 3 career matches.
+          </p>
+          <Button
+            type="button"
+            className="mt-5 text-white hover:opacity-90"
+            style={{ background: "var(--cv-accent)" }}
+            onClick={() =>
+              navigate("/job-descriptions/upload", { state: { resumeId } })
+            }
+          >
+            Find My Career Matches
+            <ArrowRight size={16} strokeWidth={2} aria-hidden />
+          </Button>
+        </Section>
 
         {/* ── Footer CTA ────────────────────────────────────────────────── */}
         <motion.div variants={sectionVariants} className="pb-4 text-center">

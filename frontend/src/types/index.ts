@@ -73,3 +73,50 @@ export type ResumeReportState = {
   fileName: string
   reviewedAt: string
 }
+
+/* ─── Job Description upload (POST /job-descriptions/upload) ────────────── */
+
+export type JobDescriptionUploadItem = {
+  id: string
+  filename: string
+  role_title: string
+  status: string
+}
+
+export type JobDescriptionUploadResponse = {
+  uploaded: JobDescriptionUploadItem[]
+}
+
+/**
+ * Shape passed via React Router location.state from ResumeReportPage to
+ * JobDescriptionUploadPage — the only thing that page needs to continue the
+ * flow is which resume to match job descriptions against.
+ */
+export type JobDescriptionUploadState = {
+  resumeId: number
+}
+
+/* ─── Career Recommendation Agent (POST /job-matches/{resume_id}) ───────── */
+
+export type ConfidenceScore = "High" | "Medium" | "Low"
+
+/** One persisted Career Recommendation Agent output, linked to a JobDescription. */
+export type JobMatch = {
+  id: number
+  resume_id: number
+  job_description_id: number
+  role_title: string
+  match_percent: number
+  confidence_score: ConfidenceScore
+  reasoning: string
+  career_overview: string
+  missing_skills: string[]
+  rank: 1 | 2 | 3
+  is_chosen: boolean
+  created_at: string
+}
+
+/** Returned by POST /job-matches/{resume_id} — always exactly three matches. */
+export type JobMatchListResponse = {
+  matches: JobMatch[]
+}
