@@ -239,3 +239,42 @@ export type VirtualExperienceState = {
   resumeId: number
   allSimulations: JobSimulationRecord[]
 }
+
+/* ─── Learning Roadmap (POST /learning-roadmap/{resume_id}) ─────────────── */
+
+/** One month of the 3-Month Learning Roadmap. */
+export type MonthPlan = {
+  focus: string
+  topics: string[]
+  projects: string[]
+  resources: string[]
+  milestones: string[]
+}
+
+/** Full 3-month roadmap returned by the Learning Roadmap Agent. */
+export type RoadmapContent = {
+  month_1: MonthPlan
+  month_2: MonthPlan
+  month_3: MonthPlan
+}
+
+/** Persisted Learning Roadmap record returned by the API. */
+export type LearningRoadmapRecord = {
+  id: number
+  resume_id: number
+  job_match_id: number
+  roadmap: RoadmapContent
+  created_at: string
+}
+
+/** Returned by POST /learning-roadmap/{resume_id}. */
+export type LearningRoadmapResponse = {
+  roadmap: LearningRoadmapRecord
+}
+
+/** Passed from SkillGapPage → LearningRoadmapPage via location.state. */
+export type LearningRoadmapState = {
+  roadmap: LearningRoadmapRecord
+  match: JobMatch
+  resumeId: number
+}

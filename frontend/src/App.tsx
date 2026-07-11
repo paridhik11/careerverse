@@ -6,6 +6,7 @@ import { CareerMatchesPage } from "@/pages/CareerMatches"
 import { DashboardPage } from "@/pages/Dashboard"
 import { JobDescriptionUploadPage } from "@/pages/JobDescriptionUpload"
 import { LandingPage } from "@/pages/LandingPage"
+import { LearningRoadmapPage } from "@/pages/LearningRoadmap"
 import { LoginPage } from "@/pages/Login"
 import { ResumeReportPage } from "@/pages/ResumeReport"
 import { SkillGapPage } from "@/pages/SkillGap"
@@ -75,6 +76,14 @@ export function App() {
           element={
             <PrivateRoute>
               <SkillGapPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/learning-roadmap"
+          element={
+            <PrivateRoute>
+              <LearningRoadmapPage />
             </PrivateRoute>
           }
         />
