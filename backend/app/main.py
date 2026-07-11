@@ -7,6 +7,7 @@ from app.api.job_matches import router as job_matches_router
 from app.api.job_simulations import router as job_simulations_router
 from app.api.resume import router as resume_router
 from app.api.resume_review import router as resume_review_router
+from app.api.skill_gap import router as skill_gap_router
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.models import job_description as _job_description_model  # noqa: F401 — registers JobDescription
@@ -14,6 +15,7 @@ from app.models import job_match as _job_match_model  # noqa: F401 — registers
 from app.models import job_simulation as _job_simulation_model  # noqa: F401 — registers JobSimulation on Base.metadata
 from app.models import report as _report_model  # noqa: F401 — registers Report on Base.metadata
 from app.models import resume as _resume_model  # noqa: F401 — registers Resume on Base.metadata
+from app.models import skill_gap as _skill_gap_model  # noqa: F401 — registers SkillGap on Base.metadata
 from app.models import user as _user_model  # noqa: F401 — registers User on Base.metadata
 
 app = FastAPI(
@@ -42,6 +44,7 @@ app.include_router(resume_review_router)
 app.include_router(job_descriptions_router)
 app.include_router(job_matches_router)
 app.include_router(job_simulations_router)
+app.include_router(skill_gap_router)
 
 
 @app.get("/health", tags=["health"])

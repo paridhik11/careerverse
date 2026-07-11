@@ -118,3 +118,33 @@ class JobMatchListResponse(BaseModel):
     """Returned by `POST /job-matches/{resume_id}` — always exactly three matches."""
 
     matches: list[JobMatchRecord] = Field(min_length=3, max_length=3)
+
+
+class CareerChoiceResponse(BaseModel):
+    """Returned by `PATCH /job-matches/{job_match_id}/choose`.
+
+    Confirms which career was selected and provides a human-readable message
+    so the frontend can display feedback and navigate to the next step.
+    """
+
+    job_match_id: int
+    role_title: str
+    message: str
+
+
+class ChosenJobMatchResponse(BaseModel):
+    """Returned by `GET /job-matches/{resume_id}/chosen`.
+
+    Contains only the fields downstream features (Skill Gap, Roadmap, Mentor)
+    depend on — avoids leaking internal fields such as `reasoning` or `rank`.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    role_title: str
+    match_percent: MatchPercent
+    confidence_score: ConfidenceScore
+    career_overview: str
+    missing_skills: list[str]
+    is_chosen: bool

@@ -120,3 +120,122 @@ export type JobMatch = {
 export type JobMatchListResponse = {
   matches: JobMatch[]
 }
+
+/* ─── Career Selection (PATCH /job-matches/{id}/choose, GET /job-matches/{resume_id}/chosen) ── */
+
+/** Returned by PATCH /job-matches/{job_match_id}/choose. */
+export type CareerChoiceResponse = {
+  job_match_id: number
+  role_title: string
+  message: string
+}
+
+/**
+ * Returned by GET /job-matches/{resume_id}/chosen.
+ * Contains only the fields downstream features (Skill Gap, Roadmap, Mentor) need.
+ */
+export type ChosenJobMatch = {
+  id: number
+  role_title: string
+  match_percent: number
+  confidence_score: ConfidenceScore
+  career_overview: string
+  missing_skills: string[]
+  is_chosen: true
+}
+
+/* ─── Virtual Work Experience (POST /job-matches/{resume_id}/simulate-all) ── */
+
+export type TaskResource = {
+  type: string
+  content: string
+}
+
+export type TaskActivityType =
+  | "multiple_choice"
+  | "short_answer"
+  | "prioritize"
+  | "bug_analysis"
+  | "email"
+  | "report"
+
+export type TaskActivity = {
+  type: TaskActivityType
+  question: string
+  options: string[]
+}
+
+export type TaskFeedback = {
+  positive: string
+  improvement: string
+  real_world_importance: string
+}
+
+export type TaskEvaluation = {
+  communication: number
+  problem_solving: number
+  technical_judgment: number
+  collaboration: number
+  leadership: number
+  adaptability: number
+}
+
+export type SimulationTask = {
+  task_number: number
+  title: string
+  estimated_time: string
+  difficulty: string
+  objective: string
+  context: string
+  resources: TaskResource[]
+  activity: TaskActivity
+  expected_solution: string
+  feedback: TaskFeedback
+  evaluation: TaskEvaluation
+  jd_reference: string
+}
+
+export type SimulationOverview = {
+  company_context: string
+  team_context: string
+  your_role: string
+  project_background: string
+}
+
+export type SimulationContent = {
+  job_title: string
+  estimated_duration: string
+  difficulty: string
+  overview: SimulationOverview
+  what_youll_learn: string[]
+  what_youll_do: string[]
+  tasks: SimulationTask[]
+}
+
+export type JobSimulationRecord = {
+  id: number
+  job_match_id: number
+  simulation: SimulationContent
+  created_at: string
+}
+
+/** Returned by POST /job-matches/{resume_id}/simulate-all */
+export type SimulateAllResponse = {
+  simulations: JobSimulationRecord[]
+}
+
+/* ─── Page-to-page navigation state shapes ──────────────────────────────── */
+
+/** Passed from JobDescriptionUploadPage → CareerMatchesPage via location.state */
+export type CareerMatchesState = {
+  matches: JobMatch[]
+  resumeId: number
+}
+
+/** Passed from CareerMatchesPage → VirtualExperiencePage via location.state */
+export type VirtualExperienceState = {
+  simulation: JobSimulationRecord
+  match: JobMatch
+  resumeId: number
+  allSimulations: JobSimulationRecord[]
+}

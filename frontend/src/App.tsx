@@ -2,12 +2,15 @@ import { Navigate, Route, Routes } from "react-router-dom"
 
 import { PrivateRoute } from "@/components/PrivateRoute"
 import { AuthProvider } from "@/contexts/AuthContext"
+import { CareerMatchesPage } from "@/pages/CareerMatches"
 import { DashboardPage } from "@/pages/Dashboard"
 import { JobDescriptionUploadPage } from "@/pages/JobDescriptionUpload"
 import { LandingPage } from "@/pages/LandingPage"
 import { LoginPage } from "@/pages/Login"
 import { ResumeReportPage } from "@/pages/ResumeReport"
+import { SkillGapPage } from "@/pages/SkillGap"
 import { UploadResumePage } from "@/pages/UploadResume"
+import { VirtualExperiencePage } from "@/pages/VirtualExperience"
 import { SignupPage } from "@/pages/Signup"
 
 export function App() {
@@ -42,12 +45,36 @@ export function App() {
             </PrivateRoute>
           }
         />
-        {/* Career Recommendation flow — upload job descriptions → Top 3 matches */}
+        {/* Career exploration flow — JD upload → matches → experience → skill gap */}
         <Route
           path="/job-descriptions/upload"
           element={
             <PrivateRoute>
               <JobDescriptionUploadPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/career-matches/:resumeId"
+          element={
+            <PrivateRoute>
+              <CareerMatchesPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/experience/:resumeId/:jobMatchId"
+          element={
+            <PrivateRoute>
+              <VirtualExperiencePage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/skill-gap"
+          element={
+            <PrivateRoute>
+              <SkillGapPage />
             </PrivateRoute>
           }
         />

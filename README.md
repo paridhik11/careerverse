@@ -1,6 +1,6 @@
 # CareerVerse AI — AI Resume & Career Advisor
 
-> Status: 🚧 In active development — 5-day MVP sprint. See [WORKFLOW.md](./WORKFLOW.md) for the day-by-day build plan.
+> Status:  In active development — 5-day MVP sprint. See [WORKFLOW.md](./WORKFLOW.md) for the day-by-day build plan.
 
 ## Problem
 

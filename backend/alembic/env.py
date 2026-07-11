@@ -30,6 +30,7 @@ from app.models import job_match as _job_match_model  # noqa: E402,F401
 from app.models import job_simulation as _job_simulation_model  # noqa: E402,F401
 from app.models import report as _report_model  # noqa: E402,F401
 from app.models import resume as _resume_model  # noqa: E402,F401
+from app.models import skill_gap as _skill_gap_model  # noqa: E402,F401
 from app.models import user as _user_model  # noqa: E402,F401
 
 # add your model's MetaData object here

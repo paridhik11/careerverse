@@ -454,6 +454,9 @@ export function JobDescriptionUploadPage() {
 
       setMatches(response.matches)
       setPhase("done")
+      navigate(`/career-matches/${resumeId}`, {
+        state: { matches: response.matches, resumeId },
+      })
     } catch (error) {
       const message =
         error instanceof ApiError

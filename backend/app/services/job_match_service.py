@@ -48,6 +48,10 @@ class RetrievalFailedError(JobMatchServiceError):
     """The RAG retrieval step (embeddings or ChromaDB) failed."""
 
 
+class JobMatchNotFoundError(JobMatchServiceError):
+    """No `JobMatch` row was found for the given id and resume combination."""
+
+
 def _resume_review_summary(db: Session, resume_id: int) -> str | None:
     """Best-effort optional context: the Resume Reviewer Agent's summary, if it exists."""
     report = report_service.get_latest_report(
@@ -135,3 +139,52 @@ async def generate_job_matches(db: Session, resume: Resume) -> list[JobMatch]:
     )
 
     return _persist_matches(db, resume_id=resume.id, matches=matches)
+
+
+def choose_job_match(db: Session, *, job_match_id: int, resume_id: int) -> JobMatch:
+    """Atomically mark one `JobMatch` as chosen and deselect every sibling.
+
+    Both writes (bulk deselect + single select) execute inside one transaction
+    so the DB is never left in a partially-updated state.
+
+    Raises
+    ------
+    JobMatchNotFoundError
+        No `JobMatch` with `id == job_match_id` and `resume_id == resume_id` exists.
+    """
+    target = (
+        db.query(JobMatch)
+        .filter(JobMatch.id == job_match_id, JobMatch.resume_id == resume_id)
+        .first()
+    )
+    if target is None:
+        raise JobMatchNotFoundError(
+            f"No job match found with id={job_match_id} for resume_id={resume_id}."
+        )
+
+    # Deselect all matches for this resume, then select the target — one transaction.
+    (
+        db.query(JobMatch)
+        .filter(JobMatch.resume_id == resume_id)
+        .update({"is_chosen": False}, synchronize_session="evaluate")
+    )
+    target.is_chosen = True
+    db.commit()
+    db.refresh(target)
+
+    logger.info(
+        "Career selected: job_match_id=%s (role=%r) for resume_id=%s.",
+        target.id,
+        target.role_title,
+        target.resume_id,
+    )
+    return target
+
+
+def get_chosen_job_match(db: Session, *, resume_id: int) -> JobMatch | None:
+    """Return the chosen `JobMatch` for a resume, or `None` if none has been selected yet."""
+    return (
+        db.query(JobMatch)
+        .filter(JobMatch.resume_id == resume_id, JobMatch.is_chosen.is_(True))
+        .first()
+    )
