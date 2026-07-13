@@ -35,23 +35,22 @@ def ensure_sqlite_schema() -> None:
     """Add columns that `create_all` cannot patch on an existing SQLite DB.
 
     `Base.metadata.create_all` only creates missing tables — it never ALTERs
-    existing ones. Local `careerverse.sqlite3` files created before
-    `User.google_id` was added therefore break every auth query with
-    `no such column: users.google_id`, which the browser surfaces as
-    "Failed to fetch" when the 500 response lacks readable CORS/JSON detail.
+    existing ones. Local `careerverse.sqlite3` files created before a column
+    was added break with `no such column: <table>.<col>` at runtime.
+
+    Each block below is idempotent: it reads `PRAGMA table_info` first and only
+    runs the `ALTER TABLE` when the column is genuinely absent.
     """
     if not _DATABASE_URL.startswith("sqlite"):
         return
 
     with engine.begin() as connection:
-        columns = {
+        # ── users table ──────────────────────────────────────────────────────
+        user_cols = {
             row[1]
             for row in connection.execute(text("PRAGMA table_info(users)")).fetchall()
         }
-        if not columns:
-            return
-
-        if "google_id" not in columns:
+        if user_cols and "google_id" not in user_cols:
             connection.execute(
                 text("ALTER TABLE users ADD COLUMN google_id VARCHAR(255)")
             )
@@ -59,6 +58,24 @@ def ensure_sqlite_schema() -> None:
                 text(
                     "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_id "
                     "ON users (google_id)"
+                )
+            )
+
+        # ── resumes table ─────────────────────────────────────────────────────
+        resume_cols = {
+            row[1]
+            for row in connection.execute(
+                text("PRAGMA table_info(resumes)")
+            ).fetchall()
+        }
+        if resume_cols and "file_hash" not in resume_cols:
+            connection.execute(
+                text("ALTER TABLE resumes ADD COLUMN file_hash VARCHAR(64)")
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_resumes_file_hash "
+                    "ON resumes (file_hash)"
                 )
             )
 
