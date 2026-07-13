@@ -1,7 +1,7 @@
-"""Heuristic resume PDF parser using PyMuPDF.
-
+"""Heuristic resume PDF parser using PyMuPDF.
+
 Extracts full text plus contact fields and common section bodies. Does not call
-OpenAI or score/analyze the resume — that belongs to the Resume Reviewer Agent.
+Gemini or score/analyze the resume — that belongs to the Resume Reviewer Agent.
 """
 
 from __future__ import annotations
@@ -239,4 +239,4 @@ def parse_resume(source: str | Path | bytes) -> ParsedResume:
         experience=sections["experience"],
         projects=sections["projects"],
     )
-
+

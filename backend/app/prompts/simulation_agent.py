@@ -3,7 +3,7 @@
 Per `.cursorrules`, all prompt strings live exclusively here.
 `app.agents.simulation_agent` imports the constants and builder functions
 defined below — it never inlines prompt text. This module contains no runtime
-logic beyond string formatting: no OpenAI calls, no I/O, no DB access.
+logic beyond string formatting: no Gemini API calls, no I/O, no DB access.
 
 Design decisions
 ----------------

@@ -34,7 +34,7 @@ export function ScoreRing({
   score,
   label,
   color,
-  trackColor = "#E5E7EB",
+  trackColor = "rgba(255, 255, 255, 0.12)",
   size = 96,
   strokeWidth = 8,
 }: ScoreRingProps) {
@@ -90,7 +90,7 @@ export function ScoreRing({
           y="50%"
           dominantBaseline="central"
           textAnchor="middle"
-          fill="#111827"
+          fill="var(--cv-ink)"
           style={{
             fontFamily: "var(--cv-font-serif)",
             fontSize: size * 0.25,
@@ -106,7 +106,7 @@ export function ScoreRing({
           fontFamily: "var(--cv-font-sans)",
           fontSize: "var(--cv-text-caption)",
           fontWeight: 600,
-          color: "#6B7280",
+          color: "var(--cv-ink-muted)",
           textTransform: "uppercase",
           letterSpacing: "0.05em",
         }}

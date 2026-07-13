@@ -61,7 +61,7 @@ export function ExperienceSidebar({
       initial={{ opacity: 0, x: -12 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.4, ease: EASE }}
-      className="flex w-56 shrink-0 flex-col gap-1 rounded-[var(--cv-radius-main)] bg-white p-4"
+      className="flex w-56 shrink-0 flex-col gap-1 rounded-[var(--cv-radius-main)] bg-[var(--cv-card-surface)] p-4"
       style={{ boxShadow: "var(--cv-shadow-card)" }}
     >
       {/* Role label */}
@@ -71,7 +71,7 @@ export function ExperienceSidebar({
             fontFamily: "var(--cv-font-sans)",
             fontSize: "var(--cv-text-caption)",
             fontWeight: 700,
-            color: "#9CA3AF",
+            color: "var(--cv-ink-muted)",
             textTransform: "uppercase",
             letterSpacing: "0.06em",
           }}
@@ -79,18 +79,19 @@ export function ExperienceSidebar({
           Virtual Experience
         </p>
         <h2
-          className="mt-0.5 leading-tight text-gray-900"
+          className="mt-0.5 leading-tight"
           style={{
             fontFamily: "var(--cv-font-serif)",
             fontSize: "var(--cv-text-small)",
             fontWeight: 500,
+            color: "var(--cv-ink)",
           }}
         >
           {jobTitle}
         </h2>
       </div>
 
-      <div className="h-px bg-gray-100" aria-hidden />
+      <div className="h-px" style={{ background: "var(--cv-border)" }} aria-hidden />
       <div className="mt-1 flex flex-col gap-0.5">
         {items.map((item) => (
           <SidebarNavItem
@@ -144,19 +145,19 @@ function SidebarNavItem({
             aria-hidden
           />
         ) : item.isLocked ? (
-          <Lock size={14} strokeWidth={1.8} style={{ color: "#D1D5DB" }} aria-hidden />
+          <Lock size={14} strokeWidth={1.8} style={{ color: "var(--cv-ink-muted)" }} aria-hidden />
         ) : Icon ? (
           <Icon
             size={16}
             strokeWidth={isActive ? 2 : 1.6}
-            style={{ color: isActive ? "var(--cv-accent)" : "#9CA3AF" }}
+            style={{ color: isActive ? "var(--cv-accent)" : "var(--cv-ink-muted)" }}
             aria-hidden
           />
         ) : (
           <span
             className="flex size-4 items-center justify-center rounded-full"
             style={{
-              background: isActive ? "var(--cv-accent)" : "#E5E7EB",
+              background: isActive ? "var(--cv-accent)" : "var(--cv-surface-subtle)",
             }}
             aria-hidden
           >
@@ -165,7 +166,7 @@ function SidebarNavItem({
                 fontFamily: "var(--cv-font-sans)",
                 fontSize: "0.6rem",
                 fontWeight: 700,
-                color: isActive ? "#fff" : "#9CA3AF",
+                color: isActive ? "#fff" : "var(--cv-ink-muted)",
               }}
             >
               {typeof item.id === "number" ? item.id + 1 : ""}
@@ -181,12 +182,12 @@ function SidebarNavItem({
           fontSize: "var(--cv-text-small)",
           fontWeight: isActive ? 700 : 500,
           color: item.isLocked
-            ? "#D1D5DB"
+            ? "var(--cv-ink-muted)"
             : isActive
               ? "var(--cv-accent)"
               : item.isCompleted
-                ? "#374151"
-                : "#6B7280",
+                ? "var(--cv-ink)"
+                : "var(--cv-ink-muted)",
         }}
       >
         {item.label}

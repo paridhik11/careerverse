@@ -21,7 +21,7 @@ const AccordionItem = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <Accordion.Item
     ref={ref}
-    className={cn("border-b border-black/[0.06] last:border-0", className)}
+    className={cn("border-b border-[var(--cv-border)] last:border-0", className)}
     {...props}
   />
 ))
@@ -40,14 +40,14 @@ const AccordionTrigger = React.forwardRef<
         "focus-visible:ring-2 focus-visible:ring-[var(--cv-accent)] focus-visible:ring-offset-2 rounded-sm",
         className,
       )}
-      style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", fontWeight: 600, color: "#111827" }}
+      style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", fontWeight: 600, color: "var(--cv-ink)" }}
       {...props}
     >
       {children}
       <ChevronDown
         size={16}
         strokeWidth={2}
-        className="shrink-0 text-gray-500 transition-transform duration-200 group-data-[state=open]:rotate-180"
+        className="shrink-0 text-[var(--cv-ink-muted)] transition-transform duration-200 group-data-[state=open]:rotate-180"
         aria-hidden
       />
     </Accordion.Trigger>
@@ -66,7 +66,7 @@ const AccordionContent = React.forwardRef<
   >
     <div
       className={cn("pb-4 pt-0", className)}
-      style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", color: "#4B5563", lineHeight: 1.6 }}
+      style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", color: "var(--cv-ink-muted)", lineHeight: 1.6 }}
     >
       {children}
     </div>

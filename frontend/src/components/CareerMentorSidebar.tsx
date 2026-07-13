@@ -16,18 +16,20 @@
  *
  * Design tokens used
  * ------------------
- * - Sidebar bg: --cv-card-lavender (Career Mentor's pastel per DESIGN_SYSTEM.md)
+ * - Header accents: purple icon circle + soft accent wash (Emergent white cards)
  * - Icon: Users (Lucide) per the icon mapping
  * - Accent: --cv-accent (#6B7FFF indigo)
  * - Typography: Fraunces for the header, Manrope everywhere else
  */
 
 import { useEffect, useRef, useState } from "react"
+import { useLocation } from "react-router-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import { MessageSquare, Send, Users, X, Loader2 } from "lucide-react"
 
 import { useActiveResume } from "@/contexts/ActiveResumeContext"
-import { getMentorHistory, streamMentorChat } from "@/services/careerMentor"
+import { useMentorUiOptional } from "@/contexts/MentorUiContext"
+import { getMentorHistory, streamMentorChat, streamGeneralMentorChat } from "@/services/careerMentor"
 import type { MentorMessageRecord } from "@/types"
 
 // ---------------------------------------------------------------------------
@@ -54,21 +56,21 @@ function MessageBubble({ role, content }: { role: "user" | "assistant"; content:
       {!isUser && (
         <div
           className="mr-2 mt-1 flex size-7 shrink-0 items-center justify-center rounded-full"
-          style={{ background: "var(--cv-card-lavender-icon)" }}
+          style={{ background: "var(--cv-accent-soft)" }}
           aria-hidden
         >
-          <Users size={14} strokeWidth={2} style={{ color: "#5B21B6" }} />
+          <Users size={14} strokeWidth={2} style={{ color: "var(--cv-accent)" }} />
         </div>
       )}
       <div
         className="max-w-[82%] rounded-2xl px-4 py-2.5"
         style={{
-          background: isUser ? "var(--cv-accent)" : "white",
+          background: isUser ? "var(--cv-accent)" : "var(--cv-card-surface)",
           boxShadow: isUser ? "none" : "var(--cv-shadow-card)",
           fontFamily: "var(--cv-font-sans)",
           fontSize: "0.8125rem",
           lineHeight: 1.6,
-          color: isUser ? "#fff" : "#1F2937",
+          color: isUser ? "#fff" : "var(--cv-ink)",
           whiteSpace: "pre-wrap",
           wordBreak: "break-word",
         }}
@@ -84,20 +86,20 @@ function TypingIndicator() {
     <div className="flex justify-start mb-3">
       <div
         className="mr-2 mt-1 flex size-7 shrink-0 items-center justify-center rounded-full"
-        style={{ background: "var(--cv-card-lavender-icon)" }}
+        style={{ background: "var(--cv-accent-soft)" }}
         aria-hidden
       >
-        <Users size={14} strokeWidth={2} style={{ color: "#5B21B6" }} />
+        <Users size={14} strokeWidth={2} style={{ color: "var(--cv-accent)" }} />
       </div>
       <div
-        className="flex items-center gap-1 rounded-2xl bg-white px-4 py-3"
-        style={{ boxShadow: "var(--cv-shadow-card)" }}
+        className="flex items-center gap-1 rounded-2xl px-4 py-3"
+        style={{ background: "var(--cv-card-surface)", boxShadow: "var(--cv-shadow-card)" }}
       >
         {[0, 1, 2].map((i) => (
           <motion.span
             key={i}
             className="block size-1.5 rounded-full"
-            style={{ background: "#9CA3AF" }}
+            style={{ background: "var(--cv-ink-muted)" }}
             animate={{ opacity: [0.3, 1, 0.3] }}
             transition={{ duration: 1, repeat: Infinity, delay: i * 0.2 }}
           />
@@ -113,8 +115,17 @@ function TypingIndicator() {
 
 export function CareerMentorSidebar() {
   const { resumeId } = useActiveResume()
+  const location = useLocation()
+  const mentorUi = useMentorUiOptional()
 
-  const [isOpen, setIsOpen] = useState(false)
+  const [localOpen, setLocalOpen] = useState(false)
+  const isOpen = mentorUi ? mentorUi.isOpen : localOpen
+  const setIsOpen = mentorUi
+    ? (open: boolean) => (open ? mentorUi.openMentor() : mentorUi.closeMentor())
+    : setLocalOpen
+
+  const hideFab = location.pathname === "/dashboard" || location.pathname === "/preview/dashboard"
+
   const [messages, setMessages] = useState<MentorMessageRecord[]>([])
   const [streamingText, setStreamingText] = useState<string | null>(null)
   const [inputValue, setInputValue] = useState("")
@@ -140,7 +151,7 @@ export function CareerMentorSidebar() {
   }, [messages, streamingText])
 
   async function handleSend() {
-    if (!resumeId || !inputValue.trim() || isSending) return
+    if (!inputValue.trim() || isSending) return
 
     const userText = inputValue.trim()
     setInputValue("")
@@ -150,46 +161,52 @@ export function CareerMentorSidebar() {
     // Optimistically add the user message.
     const userMessage: MentorMessageRecord = {
       id: Date.now(),
-      resume_id: resumeId,
+      resume_id: resumeId ?? 0,
       role: "user",
       content: userText,
       created_at: new Date().toISOString(),
     }
     setMessages((prev) => [...prev, userMessage])
 
-    await streamMentorChat(
-      resumeId,
-      userText,
-      (chunk) => {
-        setStreamingText((prev) => (prev ?? "") + chunk)
-      },
-      (fullText) => {
-        // Stream complete — move the streamed text into the messages list.
-        const assistantMessage: MentorMessageRecord = {
-          id: Date.now() + 1,
-          resume_id: resumeId,
-          role: "assistant",
-          content: fullText,
-          created_at: new Date().toISOString(),
-        }
-        setMessages((prev) => [...prev, assistantMessage])
-        setStreamingText(null)
-        setIsSending(false)
-      },
-      (error) => {
-        // On error, show the error as an assistant message.
-        const errorMessage: MentorMessageRecord = {
-          id: Date.now() + 1,
-          resume_id: resumeId,
-          role: "assistant",
-          content: error,
-          created_at: new Date().toISOString(),
-        }
-        setMessages((prev) => [...prev, errorMessage])
-        setStreamingText(null)
-        setIsSending(false)
-      },
-    )
+    const onChunk = (chunk: string) => {
+      setStreamingText((prev) => (prev ?? "") + chunk)
+    }
+    const onDone = (fullText: string) => {
+      const assistantMessage: MentorMessageRecord = {
+        id: Date.now() + 1,
+        resume_id: resumeId ?? 0,
+        role: "assistant",
+        content: fullText,
+        created_at: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, assistantMessage])
+      setStreamingText(null)
+      setIsSending(false)
+    }
+    const onError = (error: string) => {
+      const errorMessage: MentorMessageRecord = {
+        id: Date.now() + 1,
+        resume_id: resumeId ?? 0,
+        role: "assistant",
+        content: error,
+        created_at: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, errorMessage])
+      setStreamingText(null)
+      setIsSending(false)
+    }
+
+    if (resumeId) {
+      // Resume-scoped chat — full context, persisted history.
+      await streamMentorChat(resumeId, userText, onChunk, onDone, onError)
+    } else {
+      // General career chat — no resume required, in-memory history.
+      const historyForApi = messages.slice(-10).map((m) => ({
+        role: m.role,
+        content: m.content,
+      }))
+      await streamGeneralMentorChat(userText, historyForApi, onChunk, onDone, onError)
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -201,21 +218,23 @@ export function CareerMentorSidebar() {
 
   return (
     <>
-      {/* Floating action button */}
-      <motion.button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-40 flex size-14 items-center justify-center rounded-full shadow-lg"
-        style={{
-          background: "var(--cv-accent)",
-          display: isOpen ? "none" : "flex",
-        }}
-        whileHover={{ scale: 1.08 }}
-        whileTap={{ scale: 0.95 }}
-        aria-label="Open Career Mentor"
-        title="Career Mentor"
-      >
-        <MessageSquare size={22} strokeWidth={2} color="#fff" />
-      </motion.button>
+      {/* Floating action button — hidden on Dashboard (navbar mentor ring opens the panel) */}
+      {!hideFab && (
+        <motion.button
+          onClick={() => setIsOpen(true)}
+          className="fixed bottom-6 right-6 z-40 flex size-14 items-center justify-center rounded-full shadow-lg"
+          style={{
+            background: "var(--cv-accent)",
+            display: isOpen ? "none" : "flex",
+          }}
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.95 }}
+          aria-label="Open Career Mentor"
+          title="Career Mentor"
+        >
+          <MessageSquare size={22} strokeWidth={2} color="#fff" />
+        </motion.button>
+      )}
 
       {/* Sidebar panel */}
       <AnimatePresence>
@@ -248,16 +267,16 @@ export function CareerMentorSidebar() {
               <div
                 className="flex shrink-0 items-center gap-3 border-b px-5 py-4"
                 style={{
-                  background: "var(--cv-card-lavender)",
-                  borderColor: "var(--cv-card-lavender-icon)",
+                  background: "var(--cv-bg)",
+                  borderColor: "var(--cv-accent-soft)",
                 }}
               >
                 <div
                   className="flex size-9 shrink-0 items-center justify-center rounded-full"
-                  style={{ background: "var(--cv-card-lavender-icon)" }}
+                  style={{ background: "var(--cv-accent-soft)" }}
                   aria-hidden
                 >
-                  <Users size={18} strokeWidth={2} style={{ color: "#5B21B6" }} />
+                  <Users size={18} strokeWidth={2} style={{ color: "var(--cv-accent)" }} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h2
@@ -266,7 +285,7 @@ export function CareerMentorSidebar() {
                       fontFamily: "var(--cv-font-serif)",
                       fontSize: "var(--cv-text-h3)",
                       fontWeight: 500,
-                      color: "#1F2937",
+                      color: "var(--cv-ink)",
                       lineHeight: 1.3,
                     }}
                   >
@@ -276,7 +295,7 @@ export function CareerMentorSidebar() {
                     style={{
                       fontFamily: "var(--cv-font-sans)",
                       fontSize: "var(--cv-text-caption)",
-                      color: "#6B7280",
+                      color: "var(--cv-ink-muted)",
                     }}
                   >
                     Ask about your career, skills, or interview prep
@@ -284,53 +303,22 @@ export function CareerMentorSidebar() {
                 </div>
                 <button
                   onClick={() => setIsOpen(false)}
-                  className="ml-auto flex size-8 shrink-0 items-center justify-center rounded-full hover:bg-black/10 transition-colors"
+                  className="ml-auto flex size-8 shrink-0 items-center justify-center rounded-full hover:bg-white/10 transition-colors"
                   aria-label="Close mentor panel"
                 >
-                  <X size={18} style={{ color: "#374151" }} />
+                  <X size={18} style={{ color: "var(--cv-ink-muted)" }} />
                 </button>
               </div>
 
               {/* Message area */}
               <div className="flex-1 overflow-y-auto px-4 py-4">
-                {!resumeId ? (
-                  <div className="flex h-full flex-col items-center justify-center text-center px-4">
-                    <div
-                      className="mb-3 flex size-14 items-center justify-center rounded-full"
-                      style={{ background: "var(--cv-card-lavender)" }}
-                    >
-                      <Users size={24} strokeWidth={1.6} style={{ color: "#7C3AED" }} />
-                    </div>
-                    <p
-                      style={{
-                        fontFamily: "var(--cv-font-serif)",
-                        fontSize: "var(--cv-text-h3)",
-                        fontWeight: 500,
-                        color: "#1F2937",
-                        marginBottom: "0.5rem",
-                      }}
-                    >
-                      Upload your resume first
-                    </p>
-                    <p
-                      style={{
-                        fontFamily: "var(--cv-font-sans)",
-                        fontSize: "var(--cv-text-small)",
-                        color: "#6B7280",
-                        lineHeight: 1.6,
-                      }}
-                    >
-                      The mentor uses your resume, career match, skill gap, and
-                      roadmap data to give you personalised guidance.
-                    </p>
-                  </div>
-                ) : historyError ? (
+                {historyError ? (
                   <p
                     className="text-center mt-8"
                     style={{
                       fontFamily: "var(--cv-font-sans)",
                       fontSize: "var(--cv-text-small)",
-                      color: "#9CA3AF",
+                      color: "var(--cv-ink-muted)",
                     }}
                   >
                     {historyError}
@@ -343,20 +331,28 @@ export function CareerMentorSidebar() {
                           style={{
                             fontFamily: "var(--cv-font-sans)",
                             fontSize: "var(--cv-text-small)",
-                            color: "#9CA3AF",
+                            color: "var(--cv-ink-muted)",
                             lineHeight: 1.6,
                           }}
                         >
-                          Ask me anything about your career — why a role matched,
-                          what skills to build, or get mock interview questions.
+                          {resumeId
+                            ? "Ask me anything about your career — why a role matched, what skills to build, or get mock interview questions."
+                            : "Ask any career question. Upload your resume for personalised advice based on your background."}
                         </p>
                         {/* Suggested prompts */}
                         <div className="mt-5 flex flex-col gap-2 w-full">
-                          {[
-                            "Why did my top career match my resume?",
-                            "What are my most important missing skills?",
-                            "Give me 5 interview questions for my chosen role.",
-                          ].map((prompt) => (
+                          {(resumeId
+                            ? [
+                                "Why did my top career match my resume?",
+                                "What are my most important missing skills?",
+                                "Give me 5 interview questions for my chosen role.",
+                              ]
+                            : [
+                                "What careers are best for a computer science graduate?",
+                                "How do I switch from software engineering to product management?",
+                                "What skills should I learn to become an AI Engineer?",
+                              ]
+                          ).map((prompt) => (
                             <button
                               key={prompt}
                               onClick={() => {
@@ -365,10 +361,10 @@ export function CareerMentorSidebar() {
                               }}
                               className="rounded-xl px-4 py-2.5 text-left transition-colors hover:opacity-80"
                               style={{
-                                background: "var(--cv-card-lavender)",
+                                background: "var(--cv-bg)",
                                 fontFamily: "var(--cv-font-sans)",
                                 fontSize: "var(--cv-text-caption)",
-                                color: "#5B21B6",
+                                color: "var(--cv-accent)",
                                 fontWeight: 500,
                               }}
                             >
@@ -396,66 +392,77 @@ export function CareerMentorSidebar() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Input area */}
-              {resumeId && (
-                <div
-                  className="shrink-0 border-t px-4 py-3"
-                  style={{
-                    borderColor: "#E5E7EB",
-                    background: "white",
-                  }}
-                >
-                  <div
-                    className="flex items-end gap-2 rounded-2xl px-4 py-2"
-                    style={{
-                      background: "var(--cv-bg)",
-                      border: "1.5px solid #E5E7EB",
-                    }}
-                  >
-                    <textarea
-                      ref={inputRef}
-                      value={inputValue}
-                      onChange={(e) => setInputValue(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder="Ask your mentor…"
-                      rows={1}
-                      disabled={isSending}
-                      className="flex-1 resize-none bg-transparent outline-none"
-                      style={{
-                        fontFamily: "var(--cv-font-sans)",
-                        fontSize: "var(--cv-text-small)",
-                        color: "#1F2937",
-                        lineHeight: 1.5,
-                        maxHeight: "120px",
-                        overflowY: "auto",
-                      }}
-                    />
-                    <button
-                      onClick={handleSend}
-                      disabled={!inputValue.trim() || isSending}
-                      className="mb-0.5 flex size-8 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-40"
-                      style={{ background: "var(--cv-accent)" }}
-                      aria-label="Send message"
-                    >
-                      {isSending ? (
-                        <Loader2 size={15} className="animate-spin" color="#fff" />
-                      ) : (
-                        <Send size={15} color="#fff" strokeWidth={2} />
-                      )}
-                    </button>
-                  </div>
+              {/* Input area — always visible; no resume required for general questions */}
+              <div
+                className="shrink-0 border-t px-4 py-3"
+                style={{
+                  borderColor: "var(--cv-border)",
+                  background: "var(--cv-card-surface)",
+                }}
+              >
+                {!resumeId && (
                   <p
-                    className="mt-1.5 text-center"
+                    className="mb-2 text-center rounded-lg px-3 py-1.5"
                     style={{
                       fontFamily: "var(--cv-font-sans)",
-                      fontSize: "0.6875rem",
-                      color: "#D1D5DB",
+                      fontSize: "var(--cv-text-caption)",
+                      color: "var(--cv-accent-2)",
+                      background: "var(--cv-accent-soft)",
                     }}
                   >
-                    Enter to send · Shift+Enter for new line
+                    General mode — upload a resume for personalised answers
                   </p>
+                )}
+                <div
+                  className="flex items-end gap-2 rounded-2xl px-4 py-2"
+                  style={{
+                    background: "var(--cv-bg)",
+                    border: "1.5px solid var(--cv-border)",
+                  }}
+                >
+                  <textarea
+                    ref={inputRef}
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={resumeId ? "Ask your mentor…" : "Ask a career question…"}
+                    rows={1}
+                    disabled={isSending}
+                    className="flex-1 resize-none bg-transparent outline-none"
+                    style={{
+                      fontFamily: "var(--cv-font-sans)",
+                      fontSize: "var(--cv-text-small)",
+                      color: "var(--cv-ink)",
+                      lineHeight: 1.5,
+                      maxHeight: "120px",
+                      overflowY: "auto",
+                    }}
+                  />
+                  <button
+                    onClick={handleSend}
+                    disabled={!inputValue.trim() || isSending}
+                    className="mb-0.5 flex size-8 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-40"
+                    style={{ background: "var(--cv-accent)" }}
+                    aria-label="Send message"
+                  >
+                    {isSending ? (
+                      <Loader2 size={15} className="animate-spin" color="#fff" />
+                    ) : (
+                      <Send size={15} color="#fff" strokeWidth={2} />
+                    )}
+                  </button>
                 </div>
-              )}
+                <p
+                  className="mt-1.5 text-center"
+                  style={{
+                    fontFamily: "var(--cv-font-sans)",
+                    fontSize: "0.6875rem",
+                    color: "var(--cv-ink-muted)",
+                  }}
+                >
+                  Enter to send · Shift+Enter for new line
+                </p>
+              </div>
             </motion.aside>
           </>
         )}

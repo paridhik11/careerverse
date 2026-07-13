@@ -2,11 +2,11 @@
 
 The single conversational AI assistant in CareerVerse. Accepts a user
 message, assembled project context, and recent conversation history, then
-streams a natural-language mentor response token-by-token from GPT-4o.
+streams a natural-language mentor response token-by-token from Gemini.
 
-Per `.cursorrules`, this is the only module that calls OpenAI for career
+Per `.cursorrules`, this is the only module that calls Gemini for career
 mentor responses. Routes stay thin (HTTP concerns only) and services handle
-orchestration; this module handles only the OpenAI interaction.
+orchestration; this module handles only the Gemini interaction.
 
 Interview prep capability: when the user asks for interview questions, this
 agent delivers them grounded in the chosen career's JD text (which is
@@ -18,7 +18,7 @@ separate pipeline step.
 Responsibilities:
     - Accept user message, conversation history, and assembled context.
     - Build the full messages list via the prompt module.
-    - Call GPT-4o with streaming enabled.
+    - Call Gemini with streaming enabled.
     - Yield text chunks as they arrive.
     - Raise descriptive typed exceptions on every failure path so the API
       layer can log precisely and return the correct HTTP status code.
@@ -29,14 +29,16 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncGenerator
 
-from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI, RateLimitError
+import httpx
+from google import genai
+from google.genai import errors, types
 
 from app.core.config import settings
 from app.prompts.career_mentor import build_mentor_user_prompt
 
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = "gpt-4o"
+MODEL_NAME = "gemini-2.5-flash"
 
 # Conversational warmth balanced against accuracy — between the analytical
 # agents (0.3) and the simulation agent (0.7).
@@ -56,12 +58,12 @@ class CareerMentorAgentError(Exception):
     """Base class for every Career Mentor Agent failure."""
 
 
-class OpenAIRequestError(CareerMentorAgentError):
-    """The OpenAI API call failed (connection, auth, rate limit, server error)."""
+class GeminiRequestError(CareerMentorAgentError):
+    """The Gemini API call failed (connection, auth, rate limit, server error)."""
 
 
 class CareerMentorTimeoutError(CareerMentorAgentError):
-    """The OpenAI API call did not complete within `REQUEST_TIMEOUT_SECONDS`."""
+    """The Gemini API call did not complete within `REQUEST_TIMEOUT_SECONDS`."""
 
 
 # ---------------------------------------------------------------------------
@@ -69,13 +71,44 @@ class CareerMentorTimeoutError(CareerMentorAgentError):
 # ---------------------------------------------------------------------------
 
 
-def _get_client() -> AsyncOpenAI:
-    """Build an AsyncOpenAI client from settings.
+def _get_client() -> genai.Client:
+    """Build a Gemini client from settings.
 
     Constructed at call time (not module level) so tests can monkeypatch
-    `settings.openai_api_key` without reloading the module.
+    `settings.gemini_api_key` without reloading the module.
     """
-    return AsyncOpenAI(api_key=settings.openai_api_key, timeout=REQUEST_TIMEOUT_SECONDS)
+    return genai.Client(
+        api_key=settings.gemini_api_key,
+        http_options=types.HttpOptions(timeout=int(REQUEST_TIMEOUT_SECONDS * 1000)),
+    )
+
+
+def _to_gemini_contents(
+    messages: list[dict[str, str]],
+) -> tuple[str | None, list[types.Content]]:
+    """Split prompt message dicts into Gemini system_instruction + contents.
+
+    The prompt module still returns role/content message dicts
+    (system / user / assistant). Gemini uses ``system_instruction`` plus
+    ``user``/``model`` content turns.
+    """
+    system_instruction: str | None = None
+    contents: list[types.Content] = []
+
+    for message in messages:
+        role = message["role"]
+        text = message["content"]
+        if role == "system":
+            system_instruction = (
+                text if system_instruction is None else f"{system_instruction}\n\n{text}"
+            )
+            continue
+        gemini_role = "user" if role == "user" else "model"
+        contents.append(
+            types.Content(role=gemini_role, parts=[types.Part.from_text(text=text)])
+        )
+
+    return system_instruction, contents
 
 
 # ---------------------------------------------------------------------------
@@ -90,8 +123,8 @@ async def stream_response(
 ) -> AsyncGenerator[str, None]:
     """Stream the Career Mentor's response to `user_message`.
 
-    Calls GPT-4o with streaming enabled and yields non-empty text chunks as
-    they arrive from the OpenAI streaming API.
+    Calls Gemini with streaming enabled and yields non-empty text chunks as
+    they arrive from the Gemini streaming API.
 
     Parameters
     ----------
@@ -116,9 +149,9 @@ async def stream_response(
     Raises
     ------
     CareerMentorTimeoutError
-        The OpenAI API call did not complete within ``REQUEST_TIMEOUT_SECONDS``.
-    OpenAIRequestError
-        The OpenAI API call failed (network, auth, rate limit, or server error).
+        The Gemini API call did not complete within ``REQUEST_TIMEOUT_SECONDS``.
+    GeminiRequestError
+        The Gemini API call failed (network, auth, rate limit, or server error).
     """
     client = _get_client()
     messages = build_mentor_user_prompt(
@@ -126,6 +159,7 @@ async def stream_response(
         context=context,
         history=history,
     )
+    system_instruction, contents = _to_gemini_contents(messages)
 
     logger.info(
         "Career Mentor Agent: starting streaming response "
@@ -135,33 +169,35 @@ async def stream_response(
     )
 
     try:
-        stream = await client.chat.completions.create(
+        stream = await client.aio.models.generate_content_stream(
             model=MODEL_NAME,
-            temperature=TEMPERATURE,
-            messages=messages,
-            stream=True,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=TEMPERATURE,
+            ),
         )
-    except APITimeoutError as exc:
+    except httpx.TimeoutException as exc:
         raise CareerMentorTimeoutError(
             "Career Mentor Agent timed out while starting the stream."
         ) from exc
-    except (APIConnectionError, RateLimitError, APIError) as exc:
-        raise OpenAIRequestError(
-            f"OpenAI request failed during mentor streaming: {exc}"
+    except errors.APIError as exc:
+        raise GeminiRequestError(
+            f"Gemini request failed during mentor streaming: {exc}"
         ) from exc
 
     try:
         async for chunk in stream:
-            delta = chunk.choices[0].delta if chunk.choices else None
-            if delta and delta.content:
-                yield delta.content
-    except APITimeoutError as exc:
+            text = chunk.text
+            if text:
+                yield text
+    except httpx.TimeoutException as exc:
         raise CareerMentorTimeoutError(
             "Career Mentor Agent timed out during streaming."
         ) from exc
-    except (APIConnectionError, RateLimitError, APIError) as exc:
-        raise OpenAIRequestError(
-            f"OpenAI stream failed during mentor response: {exc}"
+    except errors.APIError as exc:
+        raise GeminiRequestError(
+            f"Gemini stream failed during mentor response: {exc}"
         ) from exc
 
     logger.info("Career Mentor Agent: streaming response complete.")

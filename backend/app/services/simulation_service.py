@@ -2,34 +2,27 @@
 
 Per `.cursorrules`, all orchestration belongs here:
 - `api/job_simulations.py` stays a thin HTTP layer.
-- `agents/simulation_agent.py` only knows how to call OpenAI.
+- `agents/simulation_agent.py` only knows how to call Gemini.
 - This service owns loading, concurrency, persistence, and error mapping.
 
-Flow (see `simulate_all_for_resume`):
-1. Load exactly three `JobMatch` records for the given resume, ordered by
-   rank.
-2. Load the full `JobDescription.parsed_text` for each match — this is the
-   ONLY source of truth the Simulation Agent uses.
-3. Launch three concurrent Simulation Agent calls via `asyncio.gather()` so
-   all three simulations are generated in parallel, not sequentially.
-4. Persist each result as a `JobSimulation` row linked to its `JobMatch`.
-5. Return the three records ordered by rank (rank 1 = best match first).
+Two entry points
+----------------
+`simulate_for_match(db, resume_id, job_match_id)`
+    Generates a simulation for ONE career match — called when the user
+    clicks "Start Experience" on a specific card.  Much faster than
+    generating all three: typically ~15-20 s instead of ~60 s.  Caches the
+    result so repeated clicks return instantly.
 
-Concurrency design
-------------------
-`asyncio.gather()` fires three `generate_simulation()` coroutines at once
-and awaits all three. Wall-clock time is determined by the slowest call
-(whichever JD produces the most complex simulation), not by the sum of
-all three — a significant latency win for the end user compared to serial
-execution. The DB session is used synchronously before and after `gather()`;
-it is never shared between coroutines.
+`simulate_all_for_resume(db, resume_id)`
+    Legacy entry point kept for backward compatibility. Generates all three
+    concurrently — now also checks the cache and skips already-generated
+    simulations.
 
-Idempotency
------------
-Simulations are re-generated each time the endpoint is called. This matches
-the pattern of the Career Recommendation Agent (which also always re-runs).
-For an MVP the user is unlikely to call simulate-all multiple times; the
-cost of a duplicate call is one set of AI tokens, which is acceptable.
+Caching design
+--------------
+`JobSimulation` rows are keyed on `job_match_id` (UNIQUE constraint).  Before
+calling Gemini, both helpers check whether a simulation already exists for the
+requested match.  Cache hits are returned immediately with zero AI cost.
 """
 
 from __future__ import annotations
@@ -72,6 +65,19 @@ class JobDescriptionNotFoundError(SimulationServiceError):
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _get_cached_simulation(db: Session, job_match_id: int) -> JobSimulationRecord | None:
+    """Return the cached simulation for a match, or None if none exists."""
+    row: JobSimulation | None = (
+        db.query(JobSimulation)
+        .filter(JobSimulation.job_match_id == job_match_id)
+        .order_by(JobSimulation.created_at.desc())
+        .first()
+    )
+    if row is None:
+        return None
+    return JobSimulationRecord.from_orm_row(row)
 
 
 def _load_job_matches(db: Session, resume_id: int) -> list[JobMatch]:
@@ -155,6 +161,84 @@ def _persist_simulations(
 # ---------------------------------------------------------------------------
 
 
+async def simulate_for_match(
+    db: Session,
+    resume_id: int,
+    job_match_id: int,
+) -> JobSimulationRecord:
+    """Generate (or return a cached) simulation for a single career match.
+
+    This is the preferred entry point for the "Start Experience" flow: the
+    user picks one career card and we generate ONLY that simulation instead
+    of all three.  Typical wall-clock time drops from ~60 s to ~15-20 s.
+
+    Parameters
+    ----------
+    db:            Synchronous SQLAlchemy session.
+    resume_id:     Used to scope the `JobMatch` lookup.
+    job_match_id:  The specific career match to simulate.
+
+    Returns
+    -------
+    JobSimulationRecord
+        Either a freshly generated simulation or a cached result from a
+        previous call for the same `job_match_id`.
+
+    Raises
+    ------
+    JobMatchesNotFoundError
+        The `job_match_id` doesn't exist or doesn't belong to `resume_id`.
+    JobDescriptionNotFoundError
+        The matched JD is missing or has no parsed text.
+    simulation_agent.SimulationAgentError (and subclasses)
+        The Simulation Agent call failed.
+    """
+    # Cache check — return immediately if this match was already simulated.
+    cached = _get_cached_simulation(db, job_match_id)
+    if cached is not None:
+        logger.info(
+            "Simulation Service: cache hit for job_match_id=%s resume_id=%s.",
+            job_match_id,
+            resume_id,
+        )
+        return cached
+
+    # Load the specific JobMatch (scoped to resume_id for security).
+    match: JobMatch | None = (
+        db.query(JobMatch)
+        .filter(JobMatch.id == job_match_id, JobMatch.resume_id == resume_id)
+        .first()
+    )
+    if match is None:
+        raise JobMatchesNotFoundError(
+            f"Job match id={job_match_id} not found for resume_id={resume_id}. "
+            f"Run the Career Recommendation Agent first."
+        )
+
+    jd_text = _load_jd_text(db, match.job_description_id)
+
+    logger.info(
+        "Simulation Service: generating single simulation for job_match_id=%s role='%s'.",
+        job_match_id,
+        match.role_title,
+    )
+
+    content: SimulationContent = await simulation_agent.generate_simulation(
+        match.role_title, jd_text
+    )
+
+    # Persist and return.
+    orm_row = JobSimulation(
+        job_match_id=match.id,
+        simulation_json=content.model_dump(),
+    )
+    db.add(orm_row)
+    db.commit()
+    db.refresh(orm_row)
+
+    return JobSimulationRecord.from_orm_row(orm_row)
+
+
 async def simulate_all_for_resume(
     db: Session,
     resume_id: int,
@@ -202,23 +286,45 @@ async def simulate_all_for_resume(
         ", ".join(f"'{m.role_title}'" for m in matches),
     )
 
-    # Step 3: fire all three simulation calls concurrently.
-    # asyncio.gather raises the first exception encountered and cancels the
-    # remaining coroutines, so a single failure surfaces immediately.
-    simulation_contents: tuple[SimulationContent, ...] = await asyncio.gather(
-        *[
-            simulation_agent.generate_simulation(match.role_title, jd_text)
-            for match, jd_text in zip(matches, jd_texts)
-        ]
-    )
+    # Step 3: check cache for each match — only call Gemini for uncached ones.
+    cached_results: dict[int, JobSimulationRecord] = {}
+    uncached_matches: list[JobMatch] = []
+    uncached_jd_texts: list[str] = []
 
-    logger.info(
-        "Simulation Service: all 3 simulations generated for resume_id=%s. Persisting.",
-        resume_id,
-    )
+    for match, jd_text in zip(matches, jd_texts):
+        cached = _get_cached_simulation(db, match.id)
+        if cached is not None:
+            cached_results[match.id] = cached
+            logger.info(
+                "Simulation Service: cache hit for job_match_id=%s role='%s'.",
+                match.id,
+                match.role_title,
+            )
+        else:
+            uncached_matches.append(match)
+            uncached_jd_texts.append(jd_text)
 
-    # Step 4: persist all three in one DB transaction.
-    orm_rows = _persist_simulations(db, matches, list(simulation_contents))
+    # Step 4: fire concurrent simulation calls only for uncached matches.
+    if uncached_matches:
+        logger.info(
+            "Simulation Service: generating %d new simulation(s) for resume_id=%s "
+            "(roles: %s).",
+            len(uncached_matches),
+            resume_id,
+            ", ".join(f"'{m.role_title}'" for m in uncached_matches),
+        )
 
-    # Step 5: build and return read models, preserving rank order.
-    return [JobSimulationRecord.from_orm_row(row) for row in orm_rows]
+        new_contents: tuple[SimulationContent, ...] = await asyncio.gather(
+            *[
+                simulation_agent.generate_simulation(match.role_title, jd_text)
+                for match, jd_text in zip(uncached_matches, uncached_jd_texts)
+            ]
+        )
+
+        # Step 5: persist new results.
+        new_orm_rows = _persist_simulations(db, uncached_matches, list(new_contents))
+        for row in new_orm_rows:
+            cached_results[row.job_match_id] = JobSimulationRecord.from_orm_row(row)
+
+    # Step 6: return all three in rank order.
+    return [cached_results[match.id] for match in matches]

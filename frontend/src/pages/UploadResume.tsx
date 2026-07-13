@@ -39,9 +39,9 @@ type Phase = "idle" | "uploading" | "parsing" | "reviewing" | "error"
 /* ─── Step config — drives the processing-state UI ─────────────────────── */
 
 const STEPS: Array<{ phase: Phase; label: string; description: string }> = [
-  { phase: "uploading", label: "Uploading Resume", description: "Sending your PDF to the server…" },
-  { phase: "parsing",   label: "Parsing Resume",   description: "Extracting text, skills, and experience…" },
-  { phase: "reviewing", label: "AI Reviewing",      description: "GPT-4o is reading every line of your resume…" },
+  { phase: "uploading", label: "Uploading Resume",       description: "Sending your PDF securely…" },
+  { phase: "parsing",   label: "Parsing Resume",        description: "Extracting skills, experience, and education…" },
+  { phase: "reviewing", label: "AI Reviewing",          description: "Gemini is analysing every section. Usually 10–15 seconds." },
 ]
 
 const ACTIVE_STEP_INDEX: Record<Phase, number> = {
@@ -105,7 +105,7 @@ function ProcessingPanel({ phase }: ProcessingPanelProps) {
       className="flex flex-col gap-6 py-2"
     >
       {/* Progress bar */}
-      <div className="h-1 w-full overflow-hidden rounded-full bg-gray-100">
+      <div className="h-1 w-full overflow-hidden rounded-full" style={{ background: "var(--cv-surface-subtle)" }}>
         <motion.div
           className="h-full rounded-full bg-[#6B7FFF]"
           initial={{ width: "0%" }}
@@ -127,14 +127,15 @@ function ProcessingPanel({ phase }: ProcessingPanelProps) {
               <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center">
                 {isDone ? (
                   <svg viewBox="0 0 20 20" fill="none" className="size-5" aria-hidden>
-                    <circle cx="10" cy="10" r="10" fill="#D4EDD8" />
-                    <path d="M6 10l3 3 5-5" stroke="#166534" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    <circle cx="10" cy="10" r="10" fill="var(--cv-accent-muted)" />
+                    <path d="M6 10l3 3 5-5" stroke="var(--cv-accent)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 ) : isActive ? (
                   <PulsingDot />
                 ) : (
                   <span
-                    className="flex size-5 items-center justify-center rounded-full border-2 border-gray-200"
+                    className="flex size-5 items-center justify-center rounded-full border-2"
+                    style={{ borderColor: "var(--cv-border)" }}
                     aria-hidden
                   />
                 )}
@@ -147,7 +148,7 @@ function ProcessingPanel({ phase }: ProcessingPanelProps) {
                     fontFamily: "var(--cv-font-sans)",
                     fontSize: "var(--cv-text-small)",
                     fontWeight: isActive ? 700 : isPending ? 400 : 500,
-                    color: isActive ? "#111827" : isPending ? "#9CA3AF" : "#374151",
+                    color: isActive ? "var(--cv-ink)" : "var(--cv-ink-muted)",
                     lineHeight: 1.4,
                   }}
                 >
@@ -161,7 +162,7 @@ function ProcessingPanel({ phase }: ProcessingPanelProps) {
                     style={{
                       fontFamily: "var(--cv-font-sans)",
                       fontSize: "var(--cv-text-caption)",
-                      color: "#6B7280",
+                      color: "var(--cv-ink-muted)",
                       marginTop: "2px",
                     }}
                   >
@@ -179,10 +180,10 @@ function ProcessingPanel({ phase }: ProcessingPanelProps) {
         style={{
           fontFamily: "var(--cv-font-sans)",
           fontSize: "var(--cv-text-caption)",
-          color: "#9CA3AF",
+          color: "var(--cv-ink-muted)",
         }}
       >
-        This may take up to 30 seconds — please don't close this tab.
+        Previously uploaded resumes are returned instantly from cache.
       </p>
     </motion.div>
   )
@@ -305,35 +306,35 @@ export function UploadResumePage() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-        className="w-full max-w-lg rounded-[var(--cv-radius-main)] bg-white p-6 sm:p-8"
+        className="w-full max-w-lg rounded-[var(--cv-radius-main)] bg-[var(--cv-card-surface)] p-6 sm:p-8"
         style={{ boxShadow: "var(--cv-shadow-main)" }}
       >
         {/* Header */}
         <div className="mb-6">
           <div
             className="mb-4 flex size-11 items-center justify-center rounded-full"
-            style={{ background: isProcessing ? "var(--cv-card-lavender-icon)" : "var(--cv-card-amber-icon)" }}
+            style={{ background: "var(--cv-accent-soft)" }}
             aria-hidden
           >
             {isProcessing
-              ? <Sparkles size={20} strokeWidth={2} color="#111827" />
-              : <Upload size={20} strokeWidth={2} color="#111827" />
+              ? <Sparkles size={20} strokeWidth={2} color="var(--cv-accent)" />
+              : <Upload size={20} strokeWidth={2} color="var(--cv-accent)" />
             }
           </div>
           <h1
-            className="text-gray-900"
             style={{
               fontFamily: "var(--cv-font-serif)",
               fontSize: "var(--cv-text-h2)",
               fontWeight: 400,
               lineHeight: 1.2,
+              color: "var(--cv-ink)",
             }}
           >
             {isProcessing ? "Analyzing your resume" : "Upload your resume"}
           </h1>
           <p
-            className="mt-2 text-gray-500"
-            style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)" }}
+            className="mt-2"
+            style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", color: "var(--cv-ink-muted)" }}
           >
             {isProcessing
               ? "Sit tight — AI is reviewing every section of your resume."
@@ -345,24 +346,24 @@ export function UploadResumePage() {
         {phase === "error" && formError && (
           <div className="mb-4">
             <div
-              className="flex items-start gap-3 rounded-[var(--cv-radius-card)] p-4"
-              style={{ background: "#FEF2F2" }}
+              className="flex items-start gap-3 rounded-[var(--cv-radius-card)] border p-4"
+              style={{ background: "rgba(239, 68, 68, 0.12)", borderColor: "rgba(239, 68, 68, 0.28)" }}
             >
-              <AlertCircle size={18} strokeWidth={2} color="#DC2626" className="mt-0.5 shrink-0" aria-hidden />
+              <AlertCircle size={18} strokeWidth={2} color="#F87171" className="mt-0.5 shrink-0" aria-hidden />
               <div className="min-w-0 flex-1">
                 <p
                   style={{
                     fontFamily: "var(--cv-font-sans)",
                     fontSize: "var(--cv-text-small)",
                     fontWeight: 600,
-                    color: "#991B1B",
+                    color: "#FCA5A5",
                   }}
                 >
                   {phaseErrorHeading(errorPhase)}
                 </p>
                 <p
                   className="mt-0.5"
-                  style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-caption)", color: "#B91C1C" }}
+                  style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-caption)", color: "#FCA5A5" }}
                 >
                   {formError}
                 </p>
@@ -433,29 +434,29 @@ export function UploadResumePage() {
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[var(--cv-radius-card)] px-4 py-10 text-center outline-none transition-shadow duration-200 focus-visible:ring-2 focus-visible:ring-[var(--cv-accent)]"
+                className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-[var(--cv-radius-card)] border px-4 py-10 text-center outline-none transition-shadow duration-200 focus-visible:ring-2 focus-visible:ring-[var(--cv-accent)]"
                 style={{
-                  background: isDragging ? "var(--cv-card-amber)" : "#F7F5F0",
+                  background: isDragging ? "var(--cv-accent-muted)" : "var(--cv-surface-subtle)",
+                  borderColor: isDragging ? "var(--cv-accent)" : "var(--cv-border)",
                   boxShadow: isDragging ? "var(--cv-shadow-card)" : undefined,
                 }}
                 aria-label="Upload resume PDF. Drag and drop or click to browse."
               >
                 <div
                   className="flex size-12 items-center justify-center rounded-full"
-                  style={{ background: "var(--cv-card-amber-icon)" }}
+                  style={{ background: "var(--cv-accent-soft)" }}
                 >
-                  <Upload size={22} strokeWidth={1.6} color="#111827" />
+                  <Upload size={22} strokeWidth={1.6} color="var(--cv-accent)" />
                 </div>
                 <div>
                   <p
-                    className="text-gray-900"
-                    style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-body)", fontWeight: 600 }}
+                    style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-body)", fontWeight: 600, color: "var(--cv-ink)" }}
                   >
                     {isDragging ? "Drop your PDF here" : "Drag & drop your resume"}
                   </p>
                   <p
-                    className="mt-1 text-gray-500"
-                    style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)" }}
+                    className="mt-1"
+                    style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", color: "var(--cv-ink-muted)" }}
                   >
                     or click to browse · PDF only · max 10 MB
                   </p>
@@ -477,25 +478,24 @@ export function UploadResumePage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                   className="flex items-center gap-3 rounded-[var(--cv-radius-card)] p-4"
-                  style={{ background: "var(--cv-card-amber)", boxShadow: "var(--cv-shadow-card)" }}
+                  style={{ background: "var(--cv-surface-subtle)", boxShadow: "var(--cv-shadow-card)" }}
                 >
                   <div
                     className="flex size-11 shrink-0 items-center justify-center rounded-full"
-                    style={{ background: "var(--cv-card-amber-icon)" }}
+                    style={{ background: "var(--cv-accent-soft)" }}
                   >
-                    <FileText size={20} strokeWidth={1.6} color="#111827" aria-hidden />
+                    <FileText size={20} strokeWidth={1.6} color="var(--cv-accent)" aria-hidden />
                   </div>
                   <div className="min-w-0 flex-1 text-left">
                     <p
-                      className="truncate text-gray-900"
-                      style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", fontWeight: 600 }}
+                      className="truncate"
+                      style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", fontWeight: 600, color: "var(--cv-ink)" }}
                       title={selectedFile.name}
                     >
                       {selectedFile.name}
                     </p>
                     <p
-                      className="text-gray-600"
-                      style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-caption)" }}
+                      style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-caption)", color: "var(--cv-ink-muted)" }}
                     >
                       {formatFileSize(selectedFile.size)}
                     </p>
@@ -506,7 +506,8 @@ export function UploadResumePage() {
                     size="icon"
                     onClick={handleRemove}
                     aria-label="Remove selected file"
-                    className="shrink-0 text-gray-600 hover:text-gray-900"
+                    className="shrink-0"
+                    style={{ color: "var(--cv-ink-muted)" }}
                   >
                     <Trash2 size={18} strokeWidth={1.6} />
                   </Button>

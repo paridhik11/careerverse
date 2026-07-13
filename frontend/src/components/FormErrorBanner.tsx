@@ -6,8 +6,13 @@ export function FormErrorBanner({ message }: { message: string }) {
   return (
     <div
       role="alert"
-      className="rounded-xl px-4 py-3 text-sm"
-      style={{ background: "#FEE2E2", color: "#B91C1C", fontFamily: "var(--cv-font-sans)" }}
+      className="rounded-xl border px-4 py-3 text-sm"
+      style={{
+        background: "rgba(239, 68, 68, 0.12)",
+        borderColor: "rgba(239, 68, 68, 0.28)",
+        color: "#FCA5A5",
+        fontFamily: "var(--cv-font-sans)",
+      }}
     >
       {message}
     </div>

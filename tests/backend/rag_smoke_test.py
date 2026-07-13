@@ -10,7 +10,7 @@ This script exercises the full RAG pipeline end-to-end:
 Usage (from the careerverse/ root with venv activated):
     python tests/backend/rag_smoke_test.py
 
-A real OPENAI_API_KEY must be set in the environment (or backend/.env).
+A real GEMINI_API_KEY must be set in the environment (or backend/.env).
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2] / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-# Load .env so OPENAI_API_KEY is available when running the script directly.
+# Load .env so GEMINI_API_KEY is available when running the script directly.
 try:
     from dotenv import load_dotenv
 
@@ -154,7 +154,7 @@ def main() -> None:
         results = retrieve_relevant_job_descriptions(SAMPLE_RESUME, top_k=8)
 
         if not results:
-            print("\n[!] No results returned — check your OPENAI_API_KEY.\n")
+            print("\n[!] No results returned — check your GEMINI_API_KEY.\n")
             sys.exit(1)
 
         print(f"\n[+] Retrieved {len(results)} matching job description(s):\n")

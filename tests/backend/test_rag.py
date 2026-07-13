@@ -3,11 +3,11 @@
 Coverage
 --------
 1. Chunking    — chunk_text produces correct chunks, metadata, and overlap.
-2. Embeddings  — generate_embedding / generate_embeddings call OpenAI correctly.
+2. Embeddings  — generate_embedding / generate_embeddings call Gemini correctly.
 3. ChromaDB    — add, delete, query, and empty-collection guard.
 4. Retrieval   — retrieve_relevant_job_descriptions groups chunks by JD.
 
-All OpenAI calls are mocked so no real API key is needed.
+All Gemini calls are mocked so no real API key is needed.
 All ChromaDB operations use a temporary local directory so the real vector_db
 is never touched.
 """
@@ -73,8 +73,8 @@ SAMPLE_JD_METADATA = {
     "role_title": "Software Engineer",
 }
 
-# A fake 1536-dim embedding (text-embedding-3-small dimensions).
-FAKE_EMBEDDING: list[float] = [0.01] * 1536
+# A fake embedding vector returned by gemini-embedding-001.
+FAKE_EMBEDDING: list[float] = [0.01] * 768
 
 
 @pytest.fixture()
@@ -154,68 +154,63 @@ class TestChunkText:
 
 
 # ---------------------------------------------------------------------------
-# 2. Embedding tests (OpenAI mocked)
+# 2. Embedding tests (Gemini mocked)
 # ---------------------------------------------------------------------------
 
 
 class TestGenerateEmbedding:
     def test_returns_embedding_vector(self):
-        mock_item = MagicMock()
-        mock_item.embedding = FAKE_EMBEDDING
-        mock_item.index = 0
-        mock_response = MagicMock()
-        mock_response.data = [mock_item]
+        mock_response = _mock_embedding_response([FAKE_EMBEDDING])
 
-        with patch("app.rag.embeddings.OpenAI") as MockOpenAI:
-            instance = MockOpenAI.return_value
-            instance.embeddings.create.return_value = mock_response
+        with patch("app.rag.embeddings.genai.Client") as MockClient:
+            instance = MockClient.return_value
+            instance.models.embed_content.return_value = mock_response
 
             result = generate_embedding("Software Engineer resume text")
 
         assert result == FAKE_EMBEDDING
-        instance.embeddings.create.assert_called_once_with(
-            input="Software Engineer resume text",
-            model="text-embedding-3-small",
+        instance.models.embed_content.assert_called_once_with(
+            model="gemini-embedding-001",
+            contents="Software Engineer resume text",
         )
 
     def test_generate_embeddings_batches_all_texts(self):
         texts = ["chunk one", "chunk two", "chunk three"]
-        mock_items = [
-            _mock_embedding_item(i, FAKE_EMBEDDING) for i in range(len(texts))
-        ]
-        mock_response = MagicMock()
-        mock_response.data = mock_items
+        mock_response = _mock_embedding_response([FAKE_EMBEDDING] * len(texts))
 
-        with patch("app.rag.embeddings.OpenAI") as MockOpenAI:
-            instance = MockOpenAI.return_value
-            instance.embeddings.create.return_value = mock_response
+        with patch("app.rag.embeddings.genai.Client") as MockClient:
+            instance = MockClient.return_value
+            instance.models.embed_content.return_value = mock_response
 
             result = generate_embeddings(texts)
 
         assert len(result) == 3
         assert result[0] == FAKE_EMBEDDING
-        instance.embeddings.create.assert_called_once_with(
-            input=texts,
-            model="text-embedding-3-small",
+        instance.models.embed_content.assert_called_once_with(
+            model="gemini-embedding-001",
+            contents=texts,
         )
 
     def test_generate_embeddings_empty_list_returns_empty(self):
         result = generate_embeddings([])
         assert result == []
 
-    def test_generate_embedding_propagates_openai_error(self):
-        with patch("app.rag.embeddings.OpenAI") as MockOpenAI:
-            instance = MockOpenAI.return_value
-            instance.embeddings.create.side_effect = RuntimeError("API error")
+    def test_generate_embedding_propagates_gemini_error(self):
+        with patch("app.rag.embeddings.genai.Client") as MockClient:
+            instance = MockClient.return_value
+            instance.models.embed_content.side_effect = RuntimeError("API error")
             with pytest.raises(RuntimeError, match="API error"):
                 generate_embedding("some text")
 
 
-def _mock_embedding_item(index: int, embedding: list[float]) -> MagicMock:
-    item = MagicMock()
-    item.index = index
-    item.embedding = embedding
-    return item
+def _mock_embedding_response(vectors: list[list[float]]) -> MagicMock:
+    response = MagicMock()
+    response.embeddings = []
+    for vector in vectors:
+        item = MagicMock()
+        item.values = vector
+        response.embeddings.append(item)
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -378,9 +373,9 @@ class TestRetrieveRelevantJobDescriptions:
     def test_embedding_failure_raises_embedding_error(self, chroma_tmp, monkeypatch):
         monkeypatch.setattr(
             "app.rag.retriever.generate_embedding",
-            MagicMock(side_effect=RuntimeError("OpenAI down")),
+            MagicMock(side_effect=RuntimeError("Gemini down")),
         )
-        with pytest.raises(EmbeddingError, match="OpenAI down"):
+        with pytest.raises(EmbeddingError, match="Gemini down"):
             retrieve_relevant_job_descriptions("resume text")
 
     def test_role_title_preserved_in_results(self, chroma_tmp, monkeypatch):
@@ -391,12 +386,13 @@ class TestRetrieveRelevantJobDescriptions:
         results = retrieve_relevant_job_descriptions("resume")
         assert results[0]["role_title"] == "Software Engineer"
 
-    def test_no_gpt_calls_are_made(self, chroma_tmp, monkeypatch):
-        """Retrieval must never call the completions / chat API."""
-        self._mock_embedding(monkeypatch)
+    def test_retrieval_uses_mocked_embedding_only(self, chroma_tmp, monkeypatch):
+        """Retrieval uses embedding search and does not call generation APIs."""
+        embedding_mock = MagicMock(return_value=FAKE_EMBEDDING)
+        monkeypatch.setattr("app.rag.retriever.generate_embedding", embedding_mock)
         chunks = chunk_text(SAMPLE_JD_TEXT, **SAMPLE_JD_METADATA)
         add_documents(chunks, [FAKE_EMBEDDING] * len(chunks))
 
-        with patch("openai.resources.chat.completions.Completions.create") as mock_chat:
-            retrieve_relevant_job_descriptions("resume text", top_k=4)
-        mock_chat.assert_not_called()
+        retrieve_relevant_job_descriptions("resume text", top_k=4)
+
+        embedding_mock.assert_called_once_with("resume text")

@@ -39,10 +39,10 @@ export function ProgressIndicator({
                 className="flex size-6 items-center justify-center rounded-full transition-all duration-300"
                 style={{
                   background: isDone
-                    ? "var(--cv-card-sage-icon)"
+                    ? "var(--cv-accent)"
                     : isActive
                       ? "var(--cv-accent)"
-                      : "#E5E7EB",
+                      : "var(--cv-surface-subtle)",
                 }}
                 aria-label={`Task ${i + 1}: ${isDone ? "completed" : isActive ? "active" : "pending"}`}
               >
@@ -50,7 +50,7 @@ export function ProgressIndicator({
                   <svg viewBox="0 0 12 12" fill="none" className="size-3" aria-hidden>
                     <path
                       d="M2 6l3 3 5-5"
-                      stroke="#166534"
+                      stroke="#fff"
                       strokeWidth="1.8"
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -62,7 +62,7 @@ export function ProgressIndicator({
                       fontFamily: "var(--cv-font-sans)",
                       fontSize: "0.625rem",
                       fontWeight: 700,
-                      color: isActive ? "#fff" : "#9CA3AF",
+                      color: isActive ? "#fff" : "var(--cv-ink-muted)",
                     }}
                   >
                     {i + 1}
@@ -74,7 +74,7 @@ export function ProgressIndicator({
                   className="h-px flex-1 transition-colors duration-300"
                   style={{
                     width: "1.5rem",
-                    background: isDone ? "var(--cv-card-sage-icon)" : "#E5E7EB",
+                    background: isDone ? "var(--cv-accent)" : "var(--cv-surface-subtle)",
                   }}
                   aria-hidden
                 />
@@ -85,7 +85,7 @@ export function ProgressIndicator({
       </div>
 
       {/* Progress bar */}
-      <div className="h-1 overflow-hidden rounded-full bg-gray-100">
+      <div className="h-1 overflow-hidden rounded-full" style={{ background: "var(--cv-surface-subtle)" }}>
         <motion.div
           className="h-full rounded-full"
           style={{ background: "var(--cv-accent)" }}
@@ -100,7 +100,7 @@ export function ProgressIndicator({
         style={{
           fontFamily: "var(--cv-font-sans)",
           fontSize: "var(--cv-text-caption)",
-          color: "#9CA3AF",
+          color: "var(--cv-ink-muted)",
           fontWeight: 500,
         }}
       >

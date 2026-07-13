@@ -3,7 +3,7 @@
 The RAG retriever (`app.rag.retriever.retrieve_relevant_job_descriptions`)
 and the Career Recommendation Agent
 (`app.agents.career_advisor.generate_career_matches`) are monkeypatched
-everywhere here so these tests never call OpenAI or ChromaDB for real —
+everywhere here so these tests never call Gemini or ChromaDB for real —
 agent behavior itself is covered by `test_career_advisor_agent.py`.
 """
 

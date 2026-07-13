@@ -11,7 +11,7 @@ from app.api.resume import router as resume_router
 from app.api.resume_review import router as resume_review_router
 from app.api.skill_gap import router as skill_gap_router
 from app.core.config import settings
-from app.core.database import Base, engine
+from app.core.database import Base, engine, ensure_sqlite_schema
 from app.models import job_description as _job_description_model  # noqa: F401 — registers JobDescription
 from app.models import job_match as _job_match_model  # noqa: F401 — registers JobMatch on Base.metadata
 from app.models import job_simulation as _job_simulation_model  # noqa: F401 — registers JobSimulation on Base.metadata
@@ -41,6 +41,9 @@ app.add_middleware(
 # MVP: create tables straight from ORM metadata (see the note in
 # app.core.database for why this isn't Alembic yet).
 Base.metadata.create_all(bind=engine)
+# create_all will not ALTER existing tables — patch SQLite columns added later
+# to ORM models (e.g. users.google_id) so auth does not 500 on old local DBs.
+ensure_sqlite_schema()
 
 app.include_router(auth_router)
 app.include_router(resume_router)

@@ -1,15 +1,15 @@
 """Unit tests for the AI Job Simulation Agent (Virtual Work Experience format).
 
-OpenAI is always mocked — these tests verify:
+Gemini is always mocked — these tests verify:
 - Valid VWE JSON is parsed and validated correctly.
 - JSON wrapped in a code fence is handled by the fallback extractor.
 - An empty JD text raises `InvalidSimulationResponseError` before any API call.
 - Malformed JSON raises `InvalidSimulationResponseError`.
 - Schema violations (too few tasks, missing fields, out-of-range scores) raise
   `InvalidSimulationResponseError`.
-- `APITimeoutError` is wrapped as `SimulationAgentTimeoutError`.
-- `APIConnectionError` is wrapped as `OpenAIRequestError`.
-- The model, temperature, and response_format are passed to the OpenAI client
+- `httpx.TimeoutException` is wrapped as `SimulationAgentTimeoutError`.
+- `errors.APIError` is wrapped as `GeminiRequestError`.
+- The model, temperature, and response_mime_type are passed to the Gemini client
   exactly as specified.
 """
 
@@ -19,8 +19,9 @@ import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
-from openai import APIConnectionError, APITimeoutError
+from google.genai import errors
 
 from app.agents import simulation_agent
 
@@ -270,15 +271,13 @@ VALID_SIMULATION_JSON: dict = {
 # ---------------------------------------------------------------------------
 
 
-def _fake_completion(content: str) -> SimpleNamespace:
-    message = SimpleNamespace(content=content)
-    choice = SimpleNamespace(message=message)
-    return SimpleNamespace(choices=[choice])
+def _fake_response(content: str) -> SimpleNamespace:
+    return SimpleNamespace(text=content)
 
 
-def _install_fake_client(monkeypatch: pytest.MonkeyPatch, create_mock: AsyncMock) -> None:
+def _install_fake_client(monkeypatch: pytest.MonkeyPatch, generate_mock: AsyncMock) -> None:
     fake_client = SimpleNamespace(
-        chat=SimpleNamespace(completions=SimpleNamespace(create=create_mock))
+        aio=SimpleNamespace(models=SimpleNamespace(generate_content=generate_mock))
     )
     monkeypatch.setattr(simulation_agent, "_get_client", lambda: fake_client)
 
@@ -293,8 +292,8 @@ async def test_generate_simulation_returns_valid_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Valid VWE JSON is parsed, validated, and returned as SimulationContent."""
-    create_mock = AsyncMock(return_value=_fake_completion(json.dumps(VALID_SIMULATION_JSON)))
-    _install_fake_client(monkeypatch, create_mock)
+    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(VALID_SIMULATION_JSON)))
+    _install_fake_client(monkeypatch, generate_mock)
 
     result = await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
 
@@ -316,12 +315,13 @@ async def test_generate_simulation_returns_valid_content(
             ev.adaptability,
         ]:
             assert 0 <= score <= 10
-    # Verify the OpenAI client was called with the correct parameters
-    create_mock.assert_awaited_once()
-    call_kwargs = create_mock.await_args.kwargs
-    assert call_kwargs["model"] == "gpt-4o"
-    assert call_kwargs["response_format"] == {"type": "json_object"}
-    assert call_kwargs["temperature"] == simulation_agent.TEMPERATURE
+    # Verify the Gemini client was called with the correct parameters
+    generate_mock.assert_awaited_once()
+    call_kwargs = generate_mock.await_args.kwargs
+    assert call_kwargs["model"] == "gemini-2.5-flash"
+    assert isinstance(call_kwargs["contents"], str)
+    assert call_kwargs["config"].temperature == simulation_agent.TEMPERATURE
+    assert call_kwargs["config"].response_mime_type == "application/json"
 
 
 @pytest.mark.asyncio
@@ -329,8 +329,8 @@ async def test_generate_simulation_returns_overview_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Overview fields are populated and the VWE metadata is present."""
-    create_mock = AsyncMock(return_value=_fake_completion(json.dumps(VALID_SIMULATION_JSON)))
-    _install_fake_client(monkeypatch, create_mock)
+    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(VALID_SIMULATION_JSON)))
+    _install_fake_client(monkeypatch, generate_mock)
 
     result = await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
 
@@ -347,8 +347,8 @@ async def test_generate_simulation_task_feedback_fields_present(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Every task's feedback block contains all three required fields."""
-    create_mock = AsyncMock(return_value=_fake_completion(json.dumps(VALID_SIMULATION_JSON)))
-    _install_fake_client(monkeypatch, create_mock)
+    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(VALID_SIMULATION_JSON)))
+    _install_fake_client(monkeypatch, generate_mock)
 
     result = await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
 
@@ -364,8 +364,8 @@ async def test_generate_simulation_extracts_json_from_code_fence(
 ) -> None:
     """JSON wrapped in a markdown code fence is handled by the fallback extractor."""
     fenced = f"```json\n{json.dumps(VALID_SIMULATION_JSON)}\n```"
-    create_mock = AsyncMock(return_value=_fake_completion(fenced))
-    _install_fake_client(monkeypatch, create_mock)
+    generate_mock = AsyncMock(return_value=_fake_response(fenced))
+    _install_fake_client(monkeypatch, generate_mock)
 
     result = await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
 
@@ -381,14 +381,14 @@ async def test_generate_simulation_extracts_json_from_code_fence(
 async def test_generate_simulation_raises_on_empty_jd_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An empty JD text raises InvalidSimulationResponseError without calling OpenAI."""
-    create_mock = AsyncMock()
-    _install_fake_client(monkeypatch, create_mock)
+    """An empty JD text raises InvalidSimulationResponseError without calling Gemini."""
+    generate_mock = AsyncMock()
+    _install_fake_client(monkeypatch, generate_mock)
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, "")
 
-    create_mock.assert_not_awaited()
+    generate_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -396,13 +396,13 @@ async def test_generate_simulation_raises_on_whitespace_only_jd(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Whitespace-only JD text is treated the same as empty."""
-    create_mock = AsyncMock()
-    _install_fake_client(monkeypatch, create_mock)
+    generate_mock = AsyncMock()
+    _install_fake_client(monkeypatch, generate_mock)
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, "   \n\t  ")
 
-    create_mock.assert_not_awaited()
+    generate_mock.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
@@ -415,8 +415,8 @@ async def test_generate_simulation_raises_on_malformed_json(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A non-JSON response raises InvalidSimulationResponseError."""
-    create_mock = AsyncMock(return_value=_fake_completion("this is not json at all"))
-    _install_fake_client(monkeypatch, create_mock)
+    generate_mock = AsyncMock(return_value=_fake_response("this is not json at all"))
+    _install_fake_client(monkeypatch, generate_mock)
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
@@ -427,8 +427,8 @@ async def test_generate_simulation_raises_on_empty_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An empty response content raises InvalidSimulationResponseError."""
-    create_mock = AsyncMock(return_value=_fake_completion(""))
-    _install_fake_client(monkeypatch, create_mock)
+    generate_mock = AsyncMock(return_value=_fake_response(""))
+    _install_fake_client(monkeypatch, generate_mock)
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
@@ -446,8 +446,8 @@ async def test_generate_simulation_raises_on_too_few_tasks(
     """A payload with fewer than 4 tasks fails Pydantic validation."""
     bad_payload = dict(VALID_SIMULATION_JSON)
     bad_payload["tasks"] = VALID_SIMULATION_JSON["tasks"][:3]  # only 3 tasks
-    create_mock = AsyncMock(return_value=_fake_completion(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, create_mock)
+    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
+    _install_fake_client(monkeypatch, generate_mock)
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
@@ -462,8 +462,8 @@ async def test_generate_simulation_raises_on_too_many_tasks(
     extra_task["task_number"] = 7
     bad_payload = dict(VALID_SIMULATION_JSON)
     bad_payload["tasks"] = VALID_SIMULATION_JSON["tasks"] + [extra_task] * 3
-    create_mock = AsyncMock(return_value=_fake_completion(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, create_mock)
+    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
+    _install_fake_client(monkeypatch, generate_mock)
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
@@ -478,8 +478,8 @@ async def test_generate_simulation_raises_on_out_of_range_eval_score(
 
     bad_payload = copy.deepcopy(VALID_SIMULATION_JSON)
     bad_payload["tasks"][0]["evaluation"]["problem_solving"] = 11  # out of range
-    create_mock = AsyncMock(return_value=_fake_completion(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, create_mock)
+    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
+    _install_fake_client(monkeypatch, generate_mock)
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
@@ -494,8 +494,8 @@ async def test_generate_simulation_raises_on_missing_jd_reference(
 
     bad_payload = copy.deepcopy(VALID_SIMULATION_JSON)
     del bad_payload["tasks"][0]["jd_reference"]
-    create_mock = AsyncMock(return_value=_fake_completion(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, create_mock)
+    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
+    _install_fake_client(monkeypatch, generate_mock)
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
@@ -510,8 +510,8 @@ async def test_generate_simulation_raises_on_missing_overview(
 
     bad_payload = copy.deepcopy(VALID_SIMULATION_JSON)
     del bad_payload["overview"]
-    create_mock = AsyncMock(return_value=_fake_completion(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, create_mock)
+    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
+    _install_fake_client(monkeypatch, generate_mock)
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
@@ -526,15 +526,15 @@ async def test_generate_simulation_raises_on_too_few_learning_outcomes(
 
     bad_payload = copy.deepcopy(VALID_SIMULATION_JSON)
     bad_payload["what_youll_learn"] = ["Only one outcome"]  # min is 3
-    create_mock = AsyncMock(return_value=_fake_completion(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, create_mock)
+    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
+    _install_fake_client(monkeypatch, generate_mock)
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
 
 
 # ---------------------------------------------------------------------------
-# OpenAI error wrapping
+# Gemini error wrapping
 # ---------------------------------------------------------------------------
 
 
@@ -542,23 +542,21 @@ async def test_generate_simulation_raises_on_too_few_learning_outcomes(
 async def test_generate_simulation_raises_timeout_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """APITimeoutError is wrapped as SimulationAgentTimeoutError."""
-    request = SimpleNamespace()
-    create_mock = AsyncMock(side_effect=APITimeoutError(request=request))
-    _install_fake_client(monkeypatch, create_mock)
+    """httpx.TimeoutException is wrapped as SimulationAgentTimeoutError."""
+    generate_mock = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
+    _install_fake_client(monkeypatch, generate_mock)
 
     with pytest.raises(simulation_agent.SimulationAgentTimeoutError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
 
 
 @pytest.mark.asyncio
-async def test_generate_simulation_raises_openai_request_error(
+async def test_generate_simulation_raises_gemini_request_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """APIConnectionError is wrapped as OpenAIRequestError."""
-    request = SimpleNamespace()
-    create_mock = AsyncMock(side_effect=APIConnectionError(request=request))
-    _install_fake_client(monkeypatch, create_mock)
+    """errors.APIError is wrapped as GeminiRequestError."""
+    generate_mock = AsyncMock(side_effect=errors.APIError(500, {"error": {"message": "boom"}}))
+    _install_fake_client(monkeypatch, generate_mock)
 
-    with pytest.raises(simulation_agent.OpenAIRequestError):
+    with pytest.raises(simulation_agent.GeminiRequestError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)

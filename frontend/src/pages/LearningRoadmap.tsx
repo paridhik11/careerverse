@@ -86,35 +86,35 @@ const PALETTES = [
   {
     label: "Month 1",
     subtitle: "Foundations",
-    cardBg: "var(--cv-card-amber)",
-    iconBg: "var(--cv-card-amber-icon)",
-    badgeBg: "#FDE68A",
-    badgeText: "#92400E",
-    accent: "#B45309",
-    checkColor: "#D97706",
-    railColor: "#F6DC6D",
+    cardBg: "var(--cv-card-surface)",
+    iconBg: "var(--cv-accent-soft)",
+    badgeBg: "var(--cv-accent-muted)",
+    badgeText: "var(--cv-accent)",
+    accent: "var(--cv-accent)",
+    checkColor: "var(--cv-accent)",
+    railColor: "var(--cv-accent-soft)",
   },
   {
     label: "Month 2",
     subtitle: "Intermediate Competency",
-    cardBg: "var(--cv-card-sage)",
-    iconBg: "var(--cv-card-sage-icon)",
-    badgeBg: "#BBF7D0",
-    badgeText: "#14532D",
-    accent: "#15803D",
-    checkColor: "#16A34A",
-    railColor: "#9DD4A8",
+    cardBg: "var(--cv-card-surface)",
+    iconBg: "var(--cv-accent-soft)",
+    badgeBg: "var(--cv-accent-muted)",
+    badgeText: "var(--cv-accent)",
+    accent: "var(--cv-accent)",
+    checkColor: "var(--cv-accent)",
+    railColor: "var(--cv-accent-soft)",
   },
   {
     label: "Month 3",
     subtitle: "Job Readiness",
-    cardBg: "var(--cv-card-lavender)",
-    iconBg: "var(--cv-card-lavender-icon)",
-    badgeBg: "#E9D5FF",
-    badgeText: "#581C87",
-    accent: "#7C3AED",
-    checkColor: "#8B5CF6",
-    railColor: "#C5A8EF",
+    cardBg: "var(--cv-card-surface)",
+    iconBg: "var(--cv-accent-soft)",
+    badgeBg: "var(--cv-accent-muted)",
+    badgeText: "var(--cv-accent)",
+    accent: "var(--cv-accent)",
+    checkColor: "var(--cv-accent)",
+    railColor: "var(--cv-accent-soft)",
   },
 ] as const
 
@@ -179,7 +179,7 @@ function CircleRing({
         style={{ transform: "rotate(-90deg)" }}
         aria-hidden
       >
-        <circle cx={center} cy={center} r={R} fill="none" stroke="#E5E7EB" strokeWidth={strokeWidth} />
+        <circle cx={center} cy={center} r={R} fill="none" stroke="rgba(255, 255, 255, 0.12)" strokeWidth={strokeWidth} />
         <motion.circle
           cx={center}
           cy={center}
@@ -236,14 +236,14 @@ function ChecklistItem({
         {checked ? (
           <CheckSquare size={16} strokeWidth={2} style={{ color: checkColor }} />
         ) : (
-          <Square size={16} strokeWidth={1.8} style={{ color: "#D1D5DB" }} />
+          <Square size={16} strokeWidth={1.8} style={{ color: "var(--cv-ink-muted)" }} />
         )}
       </button>
       <span
         style={{
           fontFamily: "var(--cv-font-sans)",
           fontSize: "var(--cv-text-small)",
-          color: checked ? "#9CA3AF" : "#374151",
+          color: checked ? "var(--cv-ink-muted)" : "var(--cv-ink)",
           lineHeight: 1.6,
           textDecoration: checked ? "line-through" : "none",
           transition: "color 0.18s, text-decoration 0.18s",
@@ -281,7 +281,7 @@ function SectionPanel({
 
   return (
     <div
-      className="rounded-[var(--cv-radius-card)] bg-white/65 p-4 flex flex-col gap-3"
+      className="rounded-[var(--cv-radius-card)] bg-white/5 p-4 flex flex-col gap-3"
       style={{ backdropFilter: "blur(4px)" }}
     >
       {/* Header row: label + mini progress ring */}
@@ -312,7 +312,7 @@ function SectionPanel({
           style={{
             fontFamily: "var(--cv-font-sans)",
             fontSize: "var(--cv-text-small)",
-            color: "#9CA3AF",
+            color: "var(--cv-ink-muted)",
             fontStyle: "italic",
           }}
         >
@@ -368,15 +368,15 @@ function MonthCard({ month, palette, monthIdx, checked, onToggle, isLast }: Mont
         {/* Month number bubble */}
         <motion.div
           variants={cardItem}
-          className="relative z-10 flex size-10 shrink-0 items-center justify-center rounded-full border-4 border-white shadow"
-          style={{ background: iconBg }}
+          className="relative z-10 flex size-10 shrink-0 items-center justify-center rounded-full border-4 shadow"
+          style={{ background: iconBg, borderColor: "var(--cv-bg)" }}
         >
           <span
             style={{
               fontFamily: "var(--cv-font-serif)",
               fontSize: "1.0625rem",
               fontWeight: 500,
-              color: "#111827",
+              color: "var(--cv-accent)",
               lineHeight: 1,
             }}
           >
@@ -409,7 +409,7 @@ function MonthCard({ month, palette, monthIdx, checked, onToggle, isLast }: Mont
                   fontFamily: "var(--cv-font-serif)",
                   fontSize: "var(--cv-text-h3)",
                   fontWeight: 500,
-                  color: "#111827",
+                  color: "var(--cv-ink)",
                 }}
               >
                 {label}
@@ -431,7 +431,7 @@ function MonthCard({ month, palette, monthIdx, checked, onToggle, isLast }: Mont
               style={{
                 fontFamily: "var(--cv-font-sans)",
                 fontSize: "var(--cv-text-small)",
-                color: "#4B5563",
+                color: "var(--cv-ink-muted)",
                 fontStyle: "italic",
                 lineHeight: 1.5,
               }}
@@ -448,7 +448,7 @@ function MonthCard({ month, palette, monthIdx, checked, onToggle, isLast }: Mont
                 fontFamily: "var(--cv-font-sans)",
                 fontSize: "0.6rem",
                 fontWeight: 500,
-                color: "#9CA3AF",
+                color: "var(--cv-ink-muted)",
               }}
             >
               overall
@@ -503,8 +503,8 @@ function StepProgressBar({
               <div
                 className="flex size-9 items-center justify-center rounded-full border-2 transition-all duration-300"
                 style={{
-                  background: isDone ? pal.accent : isActive ? pal.iconBg : "white",
-                  borderColor: pct > 0 ? pal.accent : "#E5E7EB",
+                  background: isDone ? pal.accent : isActive ? pal.iconBg : "var(--cv-surface-subtle)",
+                  borderColor: pct > 0 ? pal.accent : "var(--cv-border)",
                 }}
               >
                 {isDone ? (
@@ -515,7 +515,7 @@ function StepProgressBar({
                       fontFamily: "var(--cv-font-sans)",
                       fontSize: "0.6875rem",
                       fontWeight: 700,
-                      color: pct > 0 ? pal.accent : "#9CA3AF",
+                      color: pct > 0 ? pal.accent : "var(--cv-ink-muted)",
                     }}
                   >
                     {mi + 1}
@@ -528,7 +528,7 @@ function StepProgressBar({
                   fontFamily: "var(--cv-font-sans)",
                   fontSize: "0.625rem",
                   fontWeight: 600,
-                  color: pct > 0 ? pal.accent : "#9CA3AF",
+                  color: pct > 0 ? pal.accent : "var(--cv-ink-muted)",
                   whiteSpace: "nowrap",
                 }}
               >
@@ -540,7 +540,7 @@ function StepProgressBar({
             {mi < months.length - 1 && (
               <div
                 className="flex-1 mx-2 h-0.5 rounded-full -mt-4 transition-all duration-500"
-                style={{ background: pct === 100 ? pal.accent : "#E5E7EB" }}
+                style={{ background: pct === 100 ? pal.accent : "var(--cv-border)" }}
                 aria-hidden
               />
             )}
@@ -556,19 +556,18 @@ function StepProgressBar({
 function Pulse({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <div
-      className={`animate-pulse rounded-xl bg-gray-200 ${className ?? ""}`}
+      className={`animate-pulse rounded-xl bg-white/10 ${className ?? ""}`}
       style={style}
       aria-hidden
     />
   )
 }
 
-function SkeletonMonthCard({ paletteIdx }: { paletteIdx: number }) {
-  const bg = ["#FFFBEB", "#F0FDF4", "#F5F3FF"][paletteIdx]
+function SkeletonMonthCard({ paletteIdx: _paletteIdx }: { paletteIdx: number }) {
   return (
     <div
       className="rounded-[var(--cv-radius-card)] p-5 md:p-6"
-      style={{ background: bg, boxShadow: "var(--cv-shadow-card)" }}
+      style={{ background: "var(--cv-card-surface)", boxShadow: "var(--cv-shadow-card)" }}
     >
       {/* Header */}
       <div className="flex items-start justify-between mb-5">
@@ -581,7 +580,7 @@ function SkeletonMonthCard({ paletteIdx }: { paletteIdx: number }) {
       {/* Grid */}
       <div className="grid gap-4 sm:grid-cols-2">
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="rounded-[var(--cv-radius-card)] bg-white/60 p-4 space-y-2.5">
+          <div key={i} className="rounded-[var(--cv-radius-card)] bg-white/5 p-4 space-y-2.5">
             <Pulse style={{ width: "55%", height: 11, borderRadius: 6 }} />
             {[85, 130, 72, 100].map((w, j) => (
               <div key={j} className="flex items-center gap-2">
@@ -625,7 +624,7 @@ function SkeletonPage() {
             <Pulse style={{ width: 40, height: 40, borderRadius: "50%" }} />
             {i < 2 && (
               <div
-                className="flex-1 mt-1.5 rounded-full bg-gray-200"
+                className="flex-1 mt-1.5 rounded-full bg-white/10"
                 style={{ width: 3, minHeight: 40 }}
               />
             )}
@@ -662,11 +661,11 @@ function ErrorCard({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.35, ease: EASE }}
-      className="rounded-[var(--cv-radius-main)] bg-white p-10 text-center"
+      className="rounded-[var(--cv-radius-main)] bg-[var(--cv-card-surface)] p-10 text-center"
       style={{ boxShadow: "var(--cv-shadow-main)" }}
     >
-      <div className="mx-auto mb-5 flex size-14 items-center justify-center rounded-full bg-red-50">
-        <AlertCircle size={26} style={{ color: "#EF4444" }} aria-hidden />
+      <div className="mx-auto mb-5 flex size-14 items-center justify-center rounded-full" style={{ background: "rgba(239, 68, 68, 0.14)" }}>
+        <AlertCircle size={26} style={{ color: "#F87171" }} aria-hidden />
       </div>
       <h2
         className="mb-2"
@@ -674,7 +673,7 @@ function ErrorCard({
           fontFamily: "var(--cv-font-serif)",
           fontSize: "var(--cv-text-h3)",
           fontWeight: 500,
-          color: "#111827",
+          color: "var(--cv-ink)",
         }}
       >
         Roadmap generation failed
@@ -684,7 +683,7 @@ function ErrorCard({
         style={{
           fontFamily: "var(--cv-font-sans)",
           fontSize: "var(--cv-text-small)",
-          color: "#6B7280",
+          color: "var(--cv-ink-muted)",
           lineHeight: 1.6,
         }}
       >
@@ -846,7 +845,7 @@ export function LearningRoadmapPage() {
               <CheckCircle2
                 size={18}
                 strokeWidth={2.5}
-                style={{ color: "#22C55E", flexShrink: 0 }}
+                style={{ color: "#4ADE80", flexShrink: 0 }}
                 aria-hidden
               />
               <div className="min-w-0 flex-1">
@@ -855,7 +854,7 @@ export function LearningRoadmapPage() {
                     fontFamily: "var(--cv-font-sans)",
                     fontSize: "var(--cv-text-caption)",
                     fontWeight: 700,
-                    color: "#166534",
+                    color: "#4ADE80",
                     textTransform: "uppercase",
                     letterSpacing: "0.05em",
                   }}
@@ -867,7 +866,7 @@ export function LearningRoadmapPage() {
                     fontFamily: "var(--cv-font-serif)",
                     fontSize: "var(--cv-text-h3)",
                     fontWeight: 500,
-                    color: "#111827",
+                    color: "var(--cv-ink)",
                   }}
                 >
                   {match.role_title}
@@ -876,12 +875,12 @@ export function LearningRoadmapPage() {
               <span
                 className="shrink-0 rounded-full px-3 py-1"
                 style={{
-                  background: "white",
+                  background: "var(--cv-surface-subtle)",
                   border: "1.5px solid var(--cv-card-sage-icon)",
                   fontFamily: "var(--cv-font-sans)",
                   fontSize: "var(--cv-text-caption)",
                   fontWeight: 700,
-                  color: "#15803D",
+                  color: "#4ADE80",
                   whiteSpace: "nowrap",
                 }}
               >
@@ -914,7 +913,7 @@ export function LearningRoadmapPage() {
                   fontFamily: "var(--cv-font-serif)",
                   fontSize: "var(--cv-text-h1)",
                   fontWeight: 400,
-                  color: "#111827",
+                  color: "var(--cv-ink)",
                   lineHeight: 1.15,
                 }}
               >
@@ -924,7 +923,7 @@ export function LearningRoadmapPage() {
                 style={{
                   fontFamily: "var(--cv-font-sans)",
                   fontSize: "var(--cv-text-small)",
-                  color: "#6B7280",
+                  color: "var(--cv-ink-muted)",
                   marginTop: 2,
                 }}
               >

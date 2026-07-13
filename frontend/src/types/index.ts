@@ -238,6 +238,8 @@ export type VirtualExperienceState = {
   match: JobMatch
   resumeId: number
   allSimulations: JobSimulationRecord[]
+  /** When true, choosing a career returns to the Dashboard roadmap section. */
+  returnToDashboard?: boolean
 }
 
 /* ─── Learning Roadmap (POST /learning-roadmap/{resume_id}) ─────────────── */

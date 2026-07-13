@@ -1,4 +1,4 @@
-"""Unit tests for the PyMuPDF resume parser (no OpenAI, no analysis)."""
+"""Unit tests for the PyMuPDF resume parser (no AI provider, no analysis)."""
 
 from __future__ import annotations
 
@@ -189,4 +189,4 @@ def test_empty_pdf_raises() -> None:
     doc.close()
     with pytest.raises(ResumeParseError, match="no extractable text"):
         parse_resume(blank)
-
+

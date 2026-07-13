@@ -22,9 +22,9 @@ import { AlertCircle, ArrowLeft, Sparkles } from "lucide-react"
 
 import { CareerCard } from "@/components/CareerCard"
 import { Button } from "@/components/ui/button"
-import { simulateAllCareers } from "@/services/simulation"
+import { simulateSingleCareer } from "@/services/simulation"
 import { ApiError } from "@/services/api"
-import type { CareerMatchesState, JobMatch, JobSimulationRecord } from "@/types"
+import type { CareerMatchesState, JobMatch } from "@/types"
 
 const EASE = [0.22, 1, 0.36, 1] as const
 
@@ -37,32 +37,32 @@ function SkeletonCard({ delay = 0 }: { delay?: number }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay, ease: EASE }}
       className="rounded-[var(--cv-radius-card)] p-6"
-      style={{ background: "#F9FAFB", boxShadow: "var(--cv-shadow-card)" }}
+      style={{ background: "var(--cv-card-surface)", boxShadow: "var(--cv-shadow-card)" }}
     >
       <div className="mb-4 flex items-start justify-between gap-4">
         <div className="flex items-start gap-4">
-          <div className="size-12 animate-pulse rounded-full bg-gray-200" />
+          <div className="size-12 animate-pulse rounded-full bg-[var(--cv-surface-subtle)]" />
           <div className="flex flex-col gap-2">
-            <div className="h-7 w-48 animate-pulse rounded-lg bg-gray-200" />
-            <div className="h-4 w-28 animate-pulse rounded-full bg-gray-200" />
+            <div className="h-7 w-48 animate-pulse rounded-lg bg-[var(--cv-surface-subtle)]" />
+            <div className="h-4 w-28 animate-pulse rounded-full bg-[var(--cv-surface-subtle)]" />
           </div>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <div className="h-10 w-16 animate-pulse rounded-lg bg-gray-200" />
-          <div className="h-3 w-10 animate-pulse rounded bg-gray-200" />
+          <div className="h-10 w-16 animate-pulse rounded-lg bg-[var(--cv-surface-subtle)]" />
+          <div className="h-3 w-10 animate-pulse rounded bg-[var(--cv-surface-subtle)]" />
         </div>
       </div>
       <div className="mb-3 space-y-2">
-        <div className="h-4 w-full animate-pulse rounded bg-gray-200" />
-        <div className="h-4 w-5/6 animate-pulse rounded bg-gray-200" />
-        <div className="h-4 w-4/6 animate-pulse rounded bg-gray-200" />
+        <div className="h-4 w-full animate-pulse rounded bg-[var(--cv-surface-subtle)]" />
+        <div className="h-4 w-5/6 animate-pulse rounded bg-[var(--cv-surface-subtle)]" />
+        <div className="h-4 w-4/6 animate-pulse rounded bg-[var(--cv-surface-subtle)]" />
       </div>
       <div className="mb-5 flex gap-2">
         {[80, 96, 64].map((w, i) => (
-          <div key={i} className="h-6 animate-pulse rounded-full bg-gray-200" style={{ width: w }} />
+          <div key={i} className="h-6 animate-pulse rounded-full bg-[var(--cv-surface-subtle)]" style={{ width: w }} />
         ))}
       </div>
-      <div className="h-10 w-full animate-pulse rounded-[var(--cv-radius-card)] bg-gray-200" />
+      <div className="h-10 w-full animate-pulse rounded-[var(--cv-radius-card)] bg-[var(--cv-surface-subtle)]" />
     </motion.div>
   )
 }
@@ -80,30 +80,30 @@ function MissingMatchesState() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: EASE }}
-        className="w-full max-w-md rounded-[var(--cv-radius-main)] bg-white p-8 text-center"
+        className="w-full max-w-md rounded-[var(--cv-radius-main)] bg-[var(--cv-card-surface)] p-8 text-center"
         style={{ boxShadow: "var(--cv-shadow-main)" }}
       >
         <div
           className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full"
-          style={{ background: "var(--cv-card-sage-icon)" }}
+          style={{ background: "var(--cv-accent-soft)" }}
           aria-hidden
         >
-          <Sparkles size={24} strokeWidth={1.6} color="#111827" />
+          <Sparkles size={24} strokeWidth={1.6} color="var(--cv-accent)" />
         </div>
         <h1
           style={{
             fontFamily: "var(--cv-font-serif)",
             fontSize: "var(--cv-text-h2)",
             fontWeight: 400,
-            color: "#111827",
+            color: "var(--cv-ink)",
             lineHeight: 1.2,
           }}
         >
           No career matches found
         </h1>
         <p
-          className="mt-3 text-gray-500"
-          style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", lineHeight: 1.6 }}
+          className="mt-3"
+          style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", lineHeight: 1.6, color: "var(--cv-ink-muted)" }}
         >
           Career matches are generated from your resume and uploaded job descriptions.
           Please start from the beginning of the flow.
@@ -131,20 +131,20 @@ function GeneratingOverlay() {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
       className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 px-4"
-      style={{ background: "rgba(237,234,227,0.85)", backdropFilter: "blur(6px)" }}
+      style={{ background: "rgba(11,10,20,0.85)", backdropFilter: "blur(6px)" }}
     >
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ duration: 0.35, ease: EASE }}
-        className="flex max-w-sm flex-col items-center gap-4 rounded-[var(--cv-radius-main)] bg-white p-8 text-center"
+        className="flex max-w-sm flex-col items-center gap-4 rounded-[var(--cv-radius-main)] bg-[var(--cv-card-surface)] p-8 text-center"
         style={{ boxShadow: "var(--cv-shadow-main)" }}
       >
         <div
           className="flex size-14 items-center justify-center rounded-full"
-          style={{ background: "var(--cv-card-lavender-icon)" }}
+          style={{ background: "var(--cv-accent-soft)" }}
         >
-          <Sparkles size={24} strokeWidth={1.8} color="#111827" aria-hidden />
+          <Sparkles size={24} strokeWidth={1.8} color="var(--cv-accent)" aria-hidden />
         </div>
         <div>
           <h2
@@ -152,18 +152,18 @@ function GeneratingOverlay() {
               fontFamily: "var(--cv-font-serif)",
               fontSize: "var(--cv-text-h2)",
               fontWeight: 400,
-              color: "#111827",
+              color: "var(--cv-ink)",
               lineHeight: 1.2,
             }}
           >
-            Generating your Virtual Work Experience
+            Preparing Your Experience
           </h2>
           <p
-            className="mt-2 text-gray-500"
-            style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", lineHeight: 1.6 }}
+            className="mt-2"
+            style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", lineHeight: 1.6, color: "var(--cv-ink-muted)" }}
           >
-            CareerVerse is crafting realistic workplace tasks for all three roles.
-            This may take up to 60 seconds.
+            CareerVerse is crafting realistic workplace tasks for this role.
+            This usually takes 15–20 seconds.
           </p>
         </div>
         {/* Pulsing dots */}
@@ -198,7 +198,6 @@ export function CareerMatchesPage() {
   const navigate = useNavigate()
   const state = location.state as CareerMatchesState | null
 
-  const [simulations, setSimulations] = useState<JobSimulationRecord[] | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatingForMatchId, setGeneratingForMatchId] = useState<number | null>(null)
   const [simulationError, setSimulationError] = useState<string | null>(null)
@@ -210,48 +209,23 @@ export function CareerMatchesPage() {
   const { matches, resumeId } = state
   const sortedMatches = [...matches].sort((a, b) => a.rank - b.rank)
 
-  /* ── Explore Experience handler ─────────────────────────────────────── */
+  /* ── Start Experience handler ───────────────────────────────────────── */
 
   async function handleExplore(match: JobMatch) {
     setSimulationError(null)
-
-    // Use cached simulations if already generated
-    const existingSimulations = simulations
-
-    if (existingSimulations) {
-      const sim = existingSimulations.find((s) => s.job_match_id === match.id)
-      if (sim) {
-        navigate(`/experience/${resumeId}/${match.id}`, {
-          state: {
-            simulation: sim,
-            match,
-            resumeId,
-            allSimulations: existingSimulations,
-          },
-        })
-        return
-      }
-    }
-
-    // Generate all three simulations
     setIsGenerating(true)
     setGeneratingForMatchId(match.id)
 
     try {
-      const response = await simulateAllCareers(resumeId)
-      setSimulations(response.simulations)
-
-      const sim = response.simulations.find((s) => s.job_match_id === match.id)
-      if (!sim) {
-        throw new Error("Simulation not found for this career match.")
-      }
+      // Generate only the simulation for the career the user clicked.
+      // ~15-20 s instead of ~60 s (no longer generating all three at once).
+      const sim = await simulateSingleCareer(resumeId, match.id)
 
       navigate(`/experience/${resumeId}/${match.id}`, {
         state: {
           simulation: sim,
           match,
           resumeId,
-          allSimulations: response.simulations,
         },
       })
     } catch (error) {
@@ -260,7 +234,7 @@ export function CareerMatchesPage() {
           ? error.message
           : error instanceof Error
             ? error.message
-            : "Failed to generate the virtual experience. Please try again."
+            : "Could not generate the virtual experience. Please try again."
       setSimulationError(message)
     } finally {
       setIsGenerating(false)
@@ -292,12 +266,12 @@ export function CareerMatchesPage() {
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors duration-150 hover:bg-black/5"
+            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors duration-150 hover:bg-white/5"
             style={{
               fontFamily: "var(--cv-font-sans)",
               fontSize: "var(--cv-text-small)",
               fontWeight: 500,
-              color: "#6B7280",
+              color: "var(--cv-ink-muted)",
             }}
           >
             <ArrowLeft size={15} strokeWidth={2} aria-hidden />
@@ -314,25 +288,25 @@ export function CareerMatchesPage() {
         >
           <div
             className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full"
-            style={{ background: "var(--cv-card-sage-icon)" }}
+            style={{ background: "var(--cv-accent-soft)" }}
             aria-hidden
           >
-            <Sparkles size={22} strokeWidth={1.8} color="#111827" />
+            <Sparkles size={22} strokeWidth={1.8} color="var(--cv-accent)" />
           </div>
           <h1
             style={{
               fontFamily: "var(--cv-font-serif)",
               fontSize: "var(--cv-text-h1)",
               fontWeight: 400,
-              color: "#111827",
+              color: "var(--cv-ink)",
               lineHeight: 1.15,
             }}
           >
             Your Top 3 Career Matches
           </h1>
           <p
-            className="mx-auto mt-3 max-w-lg text-gray-500"
-            style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", lineHeight: 1.7 }}
+            className="mx-auto mt-3 max-w-lg"
+            style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", lineHeight: 1.7, color: "var(--cv-ink-muted)" }}
           >
             Ranked by how closely your resume aligns with each role.
             Explore a virtual work experience to see what each career really feels like — then choose your path.
@@ -347,22 +321,22 @@ export function CareerMatchesPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.3, ease: EASE }}
-              className="mb-5 flex items-start gap-3 rounded-[var(--cv-radius-card)] p-4"
-              style={{ background: "#FEF2F2", boxShadow: "var(--cv-shadow-card)" }}
+              className="mb-5 flex items-start gap-3 rounded-[var(--cv-radius-card)] border p-4"
+              style={{ background: "rgba(239, 68, 68, 0.12)", borderColor: "rgba(239, 68, 68, 0.28)", boxShadow: "var(--cv-shadow-card)" }}
             >
-              <AlertCircle size={18} strokeWidth={2} color="#DC2626" className="mt-0.5 shrink-0" aria-hidden />
+              <AlertCircle size={18} strokeWidth={2} color="#F87171" className="mt-0.5 shrink-0" aria-hidden />
               <div className="min-w-0 flex-1">
-                <p style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", fontWeight: 600, color: "#991B1B" }}>
+                <p style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", fontWeight: 600, color: "#FCA5A5" }}>
                   Could not generate experience
                 </p>
-                <p className="mt-0.5" style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-caption)", color: "#B91C1C" }}>
+                <p className="mt-0.5" style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-caption)", color: "#FCA5A5" }}>
                   {simulationError}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setSimulationError(null)}
-                className="shrink-0 text-red-400 hover:text-red-600 transition-colors"
+                className="shrink-0 text-red-400 hover:text-red-300 transition-colors"
                 aria-label="Dismiss error"
               >
                 ×
@@ -394,8 +368,8 @@ export function CareerMatchesPage() {
           className="mt-8 pb-4 text-center"
         >
           <p
-            className="mb-3 text-gray-400"
-            style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)" }}
+            className="mb-3"
+            style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", color: "var(--cv-ink-muted)" }}
           >
             Not happy with these matches?
           </p>

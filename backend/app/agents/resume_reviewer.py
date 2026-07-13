@@ -1,24 +1,41 @@
 """Resume Reviewer Agent.
 
-Sends a parsed resume to OpenAI GPT-4o and returns a validated, structured
+Sends a parsed resume to Gemini and returns a validated, structured
 evaluation (`ResumeReviewReport`). Per `.cursorrules`, this is the only
-module allowed to call OpenAI for resume review — routes stay thin and
-services never talk to the OpenAI SDK directly.
+module allowed to call Gemini for resume review — routes stay thin and
+services never talk to the Gemini SDK directly.
 
 Responsibilities:
     - Receive a parsed resume (`app.models.resume.ParsedResume`).
-    - Call GPT-4o with the Resume Reviewer prompt.
+    - Compute deterministic ATS scores via `app.services.ats_scorer`.
+    - Call Gemini with the scores embedded in the prompt so it *explains*
+      them rather than inventing new ones.
     - Validate the JSON response against `ResumeReviewReport`.
     - Handle malformed JSON / API failures gracefully via typed exceptions.
     - Return a structured `ResumeReviewReport`, never raw text.
+
+Determinism guarantee
+---------------------
+`overall_score` and `ats_score` are computed rule-based BEFORE calling
+Gemini, then injected into the prompt.  Gemini is instructed not to change
+them.  The same resume therefore always gets the same scores.
+
+Retry logic
+-----------
+Transient Gemini errors (5xx, rate limits) are retried up to MAX_RETRIES
+times with exponential back-off before raising the error to the caller.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import re
 
-from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI, RateLimitError
+import httpx
+from google import genai
+from google.genai import errors, types
 from pydantic import ValidationError
 
 from app.core.config import settings
@@ -28,9 +45,13 @@ from app.prompts.resume_reviewer_prompt import (
     RESUME_REVIEWER_SYSTEM_PROMPT,
     build_resume_reviewer_user_prompt,
 )
+from app.services.ats_scorer import compute_ats_scores
 
-MODEL_NAME = "gpt-4o"
+logger = logging.getLogger(__name__)
+
+MODEL_NAME = "gemini-2.5-flash"
 REQUEST_TIMEOUT_SECONDS = 45.0
+MAX_RETRIES = 2
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL)
 
 
@@ -38,34 +59,28 @@ class ResumeReviewerError(Exception):
     """Base class for every Resume Reviewer Agent failure."""
 
 
-class OpenAIRequestError(ResumeReviewerError):
-    """The OpenAI API call itself failed (connection, auth, rate limit, server error)."""
+class GeminiRequestError(ResumeReviewerError):
+    """The Gemini API call itself failed (connection, auth, rate limit, server error)."""
 
 
 class ResumeReviewTimeoutError(ResumeReviewerError):
-    """The OpenAI API call did not complete within `REQUEST_TIMEOUT_SECONDS`."""
+    """The Gemini API call did not complete within `REQUEST_TIMEOUT_SECONDS`."""
 
 
 class InvalidReviewResponseError(ResumeReviewerError):
-    """GPT-4o's response could not be parsed into a valid `ResumeReviewReport`."""
+    """Gemini's response could not be parsed into a valid `ResumeReviewReport`."""
 
 
-def _get_client() -> AsyncOpenAI:
-    """Build an OpenAI client from the `OPENAI_API_KEY` environment variable.
-
-    Not module-level so tests can monkeypatch `settings.openai_api_key`
-    without having to reload this module.
-    """
-    return AsyncOpenAI(api_key=settings.openai_api_key, timeout=REQUEST_TIMEOUT_SECONDS)
+def _get_client() -> genai.Client:
+    """Build a Gemini client from the `GEMINI_API_KEY` environment variable."""
+    return genai.Client(
+        api_key=settings.gemini_api_key,
+        http_options=types.HttpOptions(timeout=int(REQUEST_TIMEOUT_SECONDS * 1000)),
+    )
 
 
 def _extract_json_object(raw_text: str) -> str:
-    """Best-effort extraction of a bare JSON object from the model's raw text.
-
-    `response_format={"type": "json_object"}` should already guarantee bare
-    JSON, but this guards against the model wrapping it in a code fence or
-    adding stray text anyway, instead of failing the whole request.
-    """
+    """Best-effort extraction of a bare JSON object from the model's raw text."""
     stripped = raw_text.strip()
     fenced = _JSON_FENCE_RE.search(stripped)
     if fenced:
@@ -78,7 +93,7 @@ def _extract_json_object(raw_text: str) -> str:
 
 
 def _parse_review_response(raw_text: str) -> ResumeReviewReport:
-    """Parse and validate GPT-4o's raw output into a `ResumeReviewReport`."""
+    """Parse and validate Gemini's raw output into a `ResumeReviewReport`."""
     candidate = _extract_json_object(raw_text)
 
     try:
@@ -104,6 +119,12 @@ def _parse_review_response(raw_text: str) -> ResumeReviewReport:
 async def review_resume(parsed_resume: ParsedResume) -> ResumeReviewReport:
     """Run the Resume Reviewer Agent over a parsed resume.
 
+    Scores are deterministically computed BEFORE calling Gemini, which
+    eliminates score variance across identical uploads.  Gemini's only job
+    is to write the narrative explanation.
+
+    Transient API failures are retried up to MAX_RETRIES times.
+
     Parameters
     ----------
     parsed_resume:
@@ -117,37 +138,82 @@ async def review_resume(parsed_resume: ParsedResume) -> ResumeReviewReport:
 
     Raises
     ------
-    OpenAIRequestError
-        The OpenAI API call failed (network, auth, rate limit, server error).
+    GeminiRequestError
+        The Gemini API call failed after all retries (network, auth, rate
+        limit, server error).
     ResumeReviewTimeoutError
-        The OpenAI API call did not complete within the configured timeout.
+        The Gemini API call did not complete within the configured timeout.
     InvalidReviewResponseError
-        GPT-4o's response could not be parsed into a valid `ResumeReviewReport`.
+        Gemini's response could not be parsed into a valid `ResumeReviewReport`.
     """
+    # ── Deterministic scores (no LLM) ──────────────────────────────────────
+    scores = compute_ats_scores(parsed_resume)
+
     client = _get_client()
+    user_prompt = build_resume_reviewer_user_prompt(parsed_resume, scores)
 
-    try:
-        response = await client.chat.completions.create(
-            model=MODEL_NAME,
-            temperature=0.3,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": RESUME_REVIEWER_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": build_resume_reviewer_user_prompt(parsed_resume),
-                },
-            ],
-        )
-    except APITimeoutError as exc:
-        raise ResumeReviewTimeoutError(
-            "Resume Reviewer Agent timed out waiting for OpenAI."
-        ) from exc
-    except (APIConnectionError, RateLimitError, APIError) as exc:
-        raise OpenAIRequestError(f"OpenAI request failed: {exc}") from exc
+    last_error: Exception | None = None
 
-    raw_text = response.choices[0].message.content if response.choices else None
+    for attempt in range(MAX_RETRIES + 1):
+        if attempt > 0:
+            wait_seconds = 2 ** attempt
+            logger.warning(
+                "Resume Reviewer: retrying Gemini call (attempt %d/%d) after %ds back-off.",
+                attempt + 1,
+                MAX_RETRIES + 1,
+                wait_seconds,
+            )
+            await asyncio.sleep(wait_seconds)
+
+        try:
+            response = await client.aio.models.generate_content(
+                model=MODEL_NAME,
+                contents=user_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=RESUME_REVIEWER_SYSTEM_PROMPT,
+                    # Temperature 0 for maximum determinism in the explanation.
+                    temperature=0.1,
+                    response_mime_type="application/json",
+                ),
+            )
+        except httpx.TimeoutException as exc:
+            raise ResumeReviewTimeoutError(
+                "Resume review timed out. Please try again in a moment."
+            ) from exc
+        except errors.APIError as exc:
+            # Retry on 5xx (server errors) and 429 (rate limit); raise immediately
+            # on 4xx client errors (bad key, invalid request, etc.)
+            status = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+            is_transient = status is None or (
+                isinstance(status, int) and (status >= 500 or status == 429)
+            )
+            if is_transient and attempt < MAX_RETRIES:
+                last_error = exc
+                continue
+            raise GeminiRequestError(
+                "The AI service is temporarily unavailable. Please try again."
+            ) from exc
+        else:
+            last_error = None
+            break
+
+    if last_error is not None:
+        raise GeminiRequestError(
+            "The AI service is temporarily unavailable. Please try again."
+        ) from last_error
+
+    raw_text = response.text  # type: ignore[union-attr]
     if not raw_text:
-        raise InvalidReviewResponseError("Resume Reviewer Agent returned an empty response.")
+        raise InvalidReviewResponseError(
+            "The AI service returned an empty response. Please try again."
+        )
 
-    return _parse_review_response(raw_text)
+    report = _parse_review_response(raw_text)
+
+    # Enforce the deterministic scores — overwrite anything Gemini changed.
+    return report.model_copy(
+        update={
+            "overall_score": scores.overall_score,
+            "ats_score": scores.ats_score,
+        }
+    )

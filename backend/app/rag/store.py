@@ -217,7 +217,7 @@ def index_job_description(
 
     Returns the number of chunks indexed.
     Raises ChromaDBError on storage failure.
-    Raises openai.OpenAIError on embedding failure.
+    Raises google.genai.errors.APIError on embedding failure.
     """
     # Import here to avoid a circular dependency at module load time.
     from app.rag.embeddings import chunk_text, generate_embeddings

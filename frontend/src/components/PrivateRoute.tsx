@@ -29,8 +29,7 @@ function SessionCheckScreen() {
       style={{ background: "var(--cv-bg)" }}
     >
       <p
-        className="text-gray-500"
-        style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)" }}
+        style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", color: "var(--cv-ink-muted)" }}
       >
         Checking your session…
       </p>

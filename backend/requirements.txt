@@ -32,8 +32,8 @@ google-auth>=2.35.0,<3.0.0
 # signing keys during verification.
 requests>=2.32.0,<3.0.0
 
-# AI & embeddings
-openai>=1.57.0,<2.0.0
+# AI & embeddings (Google Gemini via the google-genai SDK)
+google-genai>=1.0.0,<3.0.0
 
 # Vector database (RAG)
 # Note: On Windows, ChromaDB may require Microsoft C++ Build Tools to compile chroma-hnswlib.

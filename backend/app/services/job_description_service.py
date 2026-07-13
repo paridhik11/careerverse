@@ -239,6 +239,104 @@ async def save_job_description_uploads(
     return JobDescriptionUploadResponse(uploaded=items)
 
 
+def list_sample_job_descriptions() -> list[dict[str, str]]:
+    """Return metadata for the seeded sample JD fixtures (no DB writes)."""
+    from app.data.sample_job_descriptions import SAMPLE_JOB_DESCRIPTIONS
+
+    return [
+        {
+            "id": sample.id,
+            "role_title": sample.role_title,
+            "category": sample.category,
+            "summary": sample.summary,
+        }
+        for sample in SAMPLE_JOB_DESCRIPTIONS
+    ]
+
+
+def seed_sample_job_descriptions(
+    db: Session,
+    sample_ids: list[str],
+) -> JobDescriptionUploadResponse:
+    """Persist selected fixture JDs into the DB and index them for RAG.
+
+    Idempotent per content hash: if a sample was already seeded, the existing
+    row is reused rather than failing as a duplicate upload.
+    """
+    from app.data.sample_job_descriptions import get_sample_by_id
+
+    if not sample_ids:
+        raise InvalidJobDescriptionError("Select at least one sample job description.")
+
+    items: list[JobDescriptionUploadItem] = []
+    persisted: list[tuple[int, str, str, str]] = []
+
+    try:
+        for sample_id in sample_ids:
+            fixture = get_sample_by_id(sample_id)
+            if fixture is None:
+                raise InvalidJobDescriptionError(
+                    f"Unknown sample job description id: '{sample_id}'."
+                )
+
+            payload = fixture.parsed_text.encode("utf-8")
+            digest = _content_hash(payload)
+
+            existing = (
+                db.query(JobDescription)
+                .filter(JobDescription.content_hash == digest)
+                .first()
+            )
+            if existing is not None:
+                items.append(
+                    JobDescriptionUploadItem(
+                        id=str(existing.id),
+                        filename=existing.filename,
+                        role_title=existing.role_title,
+                        status="success",
+                    )
+                )
+                continue
+
+            destination = _store_file(fixture.filename, "txt", payload)
+            record = JobDescription(
+                filename=fixture.filename,
+                file_type="txt",
+                file_path=str(destination),
+                role_title=fixture.role_title,
+                parsed_text=fixture.parsed_text,
+                content_hash=digest,
+            )
+            db.add(record)
+            db.flush()
+            items.append(
+                JobDescriptionUploadItem(
+                    id=str(record.id),
+                    filename=fixture.filename,
+                    role_title=fixture.role_title,
+                    status="success",
+                )
+            )
+            persisted.append(
+                (record.id, fixture.filename, fixture.role_title, fixture.parsed_text)
+            )
+
+        db.commit()
+    except InvalidJobDescriptionError:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise InvalidJobDescriptionError(
+            f"Could not seed sample job descriptions: {exc}"
+        ) from exc
+
+    if persisted:
+        _index_uploaded_job_descriptions(persisted)
+
+    return JobDescriptionUploadResponse(uploaded=items)
+
+
 def _index_uploaded_job_descriptions(
     records: list[tuple[int, str, str, str]],
 ) -> None:

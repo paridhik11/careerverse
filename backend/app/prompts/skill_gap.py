@@ -3,11 +3,11 @@
 Per `.cursorrules`, all prompt strings live exclusively here.
 `app.agents.skill_gap` imports the constants and builder functions defined
 below — it never inlines prompt text. This module contains no runtime logic
-beyond string formatting: no OpenAI calls, no I/O, no DB access.
+beyond string formatting: no Gemini API calls, no I/O, no DB access.
 
 Design decisions
 ----------------
-1. **Senior Career Coach persona** — The system prompt casts GPT-4o as a
+1. **Senior Career Coach persona** — The system prompt casts Gemini as a
    Senior Career Coach with deep hiring-side experience. This grounds the
    output in realistic, industry-aware judgements rather than generic
    keyword comparisons.

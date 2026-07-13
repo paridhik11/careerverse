@@ -26,14 +26,14 @@ const EASE = [0.22, 1, 0.36, 1] as const
 /* ─── Difficulty badge config ─────────────────────────────────────────── */
 
 const DIFFICULTY_CONFIG: Record<string, { bg: string; text: string }> = {
-  Easy: { bg: "var(--cv-card-sage)", text: "#166534" },
-  Intermediate: { bg: "var(--cv-card-amber)", text: "#92400E" },
-  Hard: { bg: "var(--cv-card-lavender)", text: "#5B21B6" },
-  Advanced: { bg: "var(--cv-card-lavender)", text: "#5B21B6" },
+  Easy: { bg: "var(--cv-accent-muted)", text: "var(--cv-accent)" },
+  Intermediate: { bg: "var(--cv-accent-muted)", text: "var(--cv-accent)" },
+  Hard: { bg: "var(--cv-accent-muted)", text: "var(--cv-accent)" },
+  Advanced: { bg: "var(--cv-accent-muted)", text: "var(--cv-accent)" },
 }
 
 function DifficultyBadge({ difficulty }: { difficulty: string }) {
-  const cfg = DIFFICULTY_CONFIG[difficulty] ?? { bg: "#F3F4F6", text: "#6B7280" }
+  const cfg = DIFFICULTY_CONFIG[difficulty] ?? { bg: "var(--cv-surface-subtle)", text: "var(--cv-ink-muted)" }
   return (
     <span
       className="rounded-full px-2.5 py-0.5"
@@ -58,7 +58,7 @@ function ResourcePanel({ type, content }: { type: string; content: string }) {
   return (
     <div
       className="rounded-[var(--cv-radius-card)] overflow-hidden"
-      style={{ background: "var(--cv-card-sky)", boxShadow: "var(--cv-shadow-card)" }}
+      style={{ background: "var(--cv-card-surface)", boxShadow: "var(--cv-shadow-card)" }}
     >
       <button
         type="button"
@@ -66,22 +66,22 @@ function ResourcePanel({ type, content }: { type: string; content: string }) {
         className="flex w-full items-center justify-between gap-3 px-4 py-3"
       >
         <div className="flex items-center gap-2">
-          <FileText size={14} strokeWidth={1.8} style={{ color: "#0369A1" }} aria-hidden />
+          <FileText size={14} strokeWidth={1.8} style={{ color: "var(--cv-accent-2)" }} aria-hidden />
           <span
             style={{
               fontFamily: "var(--cv-font-sans)",
               fontSize: "var(--cv-text-small)",
               fontWeight: 600,
-              color: "#0369A1",
+              color: "var(--cv-accent-2)",
             }}
           >
             {type}
           </span>
         </div>
         {isOpen ? (
-          <ChevronUp size={16} strokeWidth={2} style={{ color: "#6B7280" }} aria-hidden />
+          <ChevronUp size={16} strokeWidth={2} style={{ color: "var(--cv-ink-muted)" }} aria-hidden />
         ) : (
-          <ChevronDown size={16} strokeWidth={2} style={{ color: "#6B7280" }} aria-hidden />
+          <ChevronDown size={16} strokeWidth={2} style={{ color: "var(--cv-ink-muted)" }} aria-hidden />
         )}
       </button>
       {isOpen && (
@@ -90,13 +90,14 @@ function ResourcePanel({ type, content }: { type: string; content: string }) {
           animate={{ opacity: 1, height: "auto" }}
           exit={{ opacity: 0, height: 0 }}
           transition={{ duration: 0.25, ease: EASE }}
-          className="border-t border-white/40 px-4 pb-4 pt-3"
+          className="border-t px-4 pb-4 pt-3"
+          style={{ borderColor: "var(--cv-border)" }}
         >
           <p
             style={{
               fontFamily: "var(--cv-font-sans)",
               fontSize: "var(--cv-text-small)",
-              color: "#1E3A5F",
+              color: "var(--cv-ink-muted)",
               lineHeight: 1.7,
               whiteSpace: "pre-wrap",
             }}
@@ -131,7 +132,7 @@ function ActivityInput({ task, value, onChange, isSubmitted }: ActivityInputProp
               key={i}
               className="flex cursor-pointer items-start gap-3 rounded-[var(--cv-radius-card)] p-4 transition-colors duration-150"
               style={{
-                background: isSelected ? "var(--cv-accent-muted)" : "#F9FAFB",
+                background: isSelected ? "var(--cv-accent-muted)" : "var(--cv-surface-subtle)",
                 border: isSelected
                   ? "2px solid var(--cv-accent)"
                   : "2px solid transparent",
@@ -151,7 +152,7 @@ function ActivityInput({ task, value, onChange, isSubmitted }: ActivityInputProp
                 style={{
                   fontFamily: "var(--cv-font-sans)",
                   fontSize: "var(--cv-text-small)",
-                  color: isSelected ? "#111827" : "#374151",
+                  color: isSelected ? "var(--cv-ink)" : "var(--cv-ink-muted)",
                   fontWeight: isSelected ? 600 : 400,
                   lineHeight: 1.5,
                 }}
@@ -188,11 +189,11 @@ function ActivityInput({ task, value, onChange, isSubmitted }: ActivityInputProp
       disabled={isSubmitted}
       placeholder={placeholders[activity.type] ?? "Write your response…"}
       rows={minRows[activity.type] ?? 5}
-      className="w-full resize-y rounded-[var(--cv-radius-card)] border-0 bg-gray-50 px-4 py-3 outline-none ring-1 ring-gray-200 transition-shadow duration-150 focus:ring-2 focus:ring-[var(--cv-accent)] disabled:resize-none disabled:opacity-70"
+      className="w-full resize-y rounded-[var(--cv-radius-card)] border-0 bg-[var(--cv-surface-subtle)] px-4 py-3 outline-none ring-1 ring-[var(--cv-border)] transition-shadow duration-150 focus:ring-2 focus:ring-[var(--cv-accent)] disabled:resize-none disabled:opacity-70"
       style={{
         fontFamily: "var(--cv-font-sans)",
         fontSize: "var(--cv-text-small)",
-        color: "#111827",
+        color: "var(--cv-ink)",
         lineHeight: 1.6,
       }}
     />
@@ -242,7 +243,7 @@ export function TaskCard({ task, taskIndex: _taskIndex, isSubmitted, onSubmit }:
             style={{
               fontFamily: "var(--cv-font-sans)",
               fontSize: "var(--cv-text-caption)",
-              color: "#9CA3AF",
+              color: "var(--cv-ink-muted)",
             }}
           >
             <Clock size={12} strokeWidth={2} aria-hidden />
@@ -254,7 +255,7 @@ export function TaskCard({ task, taskIndex: _taskIndex, isSubmitted, onSubmit }:
             fontFamily: "var(--cv-font-serif)",
             fontSize: "var(--cv-text-h2)",
             fontWeight: 400,
-            color: "#111827",
+            color: "var(--cv-ink)",
             lineHeight: 1.2,
           }}
         >
@@ -265,9 +266,9 @@ export function TaskCard({ task, taskIndex: _taskIndex, isSubmitted, onSubmit }:
       {/* Objective */}
       <div
         className="flex items-start gap-3 rounded-[var(--cv-radius-card)] p-4"
-        style={{ background: "var(--cv-card-amber)", boxShadow: "var(--cv-shadow-card)" }}
+        style={{ background: "var(--cv-card-surface)", boxShadow: "var(--cv-shadow-card)" }}
       >
-        <Target size={16} strokeWidth={2} style={{ color: "#D97706", marginTop: "2px", flexShrink: 0 }} aria-hidden />
+        <Target size={16} strokeWidth={2} style={{ color: "#FBBF24", marginTop: "2px", flexShrink: 0 }} aria-hidden />
         <div>
           <p
             className="mb-0.5"
@@ -275,7 +276,7 @@ export function TaskCard({ task, taskIndex: _taskIndex, isSubmitted, onSubmit }:
               fontFamily: "var(--cv-font-sans)",
               fontSize: "var(--cv-text-caption)",
               fontWeight: 700,
-              color: "#92400E",
+              color: "#FBBF24",
               textTransform: "uppercase",
               letterSpacing: "0.05em",
             }}
@@ -286,7 +287,7 @@ export function TaskCard({ task, taskIndex: _taskIndex, isSubmitted, onSubmit }:
             style={{
               fontFamily: "var(--cv-font-sans)",
               fontSize: "var(--cv-text-small)",
-              color: "#1F2937",
+              color: "var(--cv-ink)",
               lineHeight: 1.6,
             }}
           >
@@ -298,13 +299,13 @@ export function TaskCard({ task, taskIndex: _taskIndex, isSubmitted, onSubmit }:
       {/* Context */}
       <div>
         <div className="mb-2 flex items-center gap-1.5">
-          <Zap size={14} strokeWidth={2} style={{ color: "#6B7280" }} aria-hidden />
+          <Zap size={14} strokeWidth={2} style={{ color: "var(--cv-ink-muted)" }} aria-hidden />
           <p
             style={{
               fontFamily: "var(--cv-font-sans)",
               fontSize: "var(--cv-text-caption)",
               fontWeight: 700,
-              color: "#6B7280",
+              color: "var(--cv-ink-muted)",
               textTransform: "uppercase",
               letterSpacing: "0.06em",
             }}
@@ -316,7 +317,7 @@ export function TaskCard({ task, taskIndex: _taskIndex, isSubmitted, onSubmit }:
           style={{
             fontFamily: "var(--cv-font-sans)",
             fontSize: "var(--cv-text-small)",
-            color: "#374151",
+            color: "var(--cv-ink)",
             lineHeight: 1.7,
           }}
         >
@@ -328,13 +329,13 @@ export function TaskCard({ task, taskIndex: _taskIndex, isSubmitted, onSubmit }:
       {task.resources.length > 0 && (
         <div>
           <div className="mb-2 flex items-center gap-1.5">
-            <BookOpen size={14} strokeWidth={2} style={{ color: "#6B7280" }} aria-hidden />
+            <BookOpen size={14} strokeWidth={2} style={{ color: "var(--cv-ink-muted)" }} aria-hidden />
             <p
               style={{
                 fontFamily: "var(--cv-font-sans)",
                 fontSize: "var(--cv-text-caption)",
                 fontWeight: 700,
-                color: "#6B7280",
+                color: "var(--cv-ink-muted)",
                 textTransform: "uppercase",
                 letterSpacing: "0.06em",
               }}
@@ -358,7 +359,7 @@ export function TaskCard({ task, taskIndex: _taskIndex, isSubmitted, onSubmit }:
             fontFamily: "var(--cv-font-serif)",
             fontSize: "var(--cv-text-h3)",
             fontWeight: 500,
-            color: "#111827",
+            color: "var(--cv-ink)",
             lineHeight: 1.3,
           }}
         >

@@ -109,7 +109,9 @@ export function SignupPage() {
           {fieldErrors.password ? (
             <FieldErrorText message={fieldErrors.password} />
           ) : (
-            <p className="text-xs text-gray-500">At least {MIN_PASSWORD_LENGTH} characters.</p>
+            <p className="text-xs" style={{ color: "var(--cv-ink-muted)" }}>
+              At least {MIN_PASSWORD_LENGTH} characters.
+            </p>
           )}
         </div>
 
@@ -134,5 +136,5 @@ export function SignupPage() {
 }
 
 function FieldErrorText({ message }: { message: string }) {
-  return <p className="text-xs text-red-600">{message}</p>
+  return <p className="text-xs text-red-400">{message}</p>
 }

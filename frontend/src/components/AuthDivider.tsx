@@ -2,14 +2,14 @@
 export function AuthDivider({ label = "or" }: { label?: string }) {
   return (
     <div className="my-4 flex items-center gap-3" role="separator">
-      <span className="h-px flex-1 bg-gray-200" />
+      <span className="h-px flex-1" style={{ background: "var(--cv-border)" }} />
       <span
-        className="text-xs text-gray-400"
-        style={{ fontFamily: "var(--cv-font-sans)" }}
+        className="text-xs"
+        style={{ fontFamily: "var(--cv-font-sans)", color: "var(--cv-ink-muted)" }}
       >
         {label}
       </span>
-      <span className="h-px flex-1 bg-gray-200" />
+      <span className="h-px flex-1" style={{ background: "var(--cv-border)" }} />
     </div>
   )
 }

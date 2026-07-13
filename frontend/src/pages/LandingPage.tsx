@@ -1,31 +1,47 @@
 /**
  * LandingPage — public marketing surface for CareerVerse AI.
  *
- * Motion: staggered hero fade-in, floating violet glow blobs, animated CTAs,
- * scroll-triggered feature cards with hover lift, smooth section reveals.
- * All ambient / entrance motion respects prefers-reduced-motion.
+ * Uses the app-wide dark palette (--cv-bg/--cv-ink/--cv-accent/.cv-card,
+ * etc. in index.css) shared by every other page. The only Landing-exclusive
+ * extras are the gradient headline treatment and the ambient drifting orbs,
+ * scoped under .cv-landing.
+ *
+ * Motion (5 effects, all with a static/opacity-only fallback under
+ * prefers-reduced-motion):
+ *   1. Hero headline — word-by-word fade + slide-up, staggerChildren.
+ *   2. Hero CTA buttons — magnetic hover (useMotionValue + useSpring).
+ *   3. Feature cards — staggered scroll-triggered reveal, triggerOnce.
+ *   4. Ambient background orbs — slow 16-20s drift behind hero content.
+ *   5. Final CTA section — scale + fade entrance on scroll.
  */
 
-import { useReducedMotion, motion, type Variants } from "framer-motion"
-import type { ReactNode } from "react"
 import {
-  FileText,
-  Briefcase,
-  Sparkles,
-  Users,
-  Map,
-  Upload,
-  BrainCircuit,
-  ArrowRight,
-} from "lucide-react"
+  useReducedMotion,
+  motion,
+  useMotionValue,
+  useSpring,
+  type Variants,
+} from "framer-motion"
+import type { ReactNode, MouseEvent as ReactMouseEvent } from "react"
+import { FileText, Briefcase, Sparkles, Users, Map, ArrowRight } from "lucide-react"
 import { FeatureCard } from "@/components/FeatureCard"
+import { CareerTilesIntro } from "@/components/CareerTilesIntro"
 
 /* ─── Animation tokens ───────────────────────────────────────────────────── */
 
 const EASE = [0.22, 1, 0.36, 1] as const
 
+/** Scroll-triggered reveal used by feature cards and section headings.
+ *  Reduced-motion fallback is an opacity-only fade — never fully static. */
 function makeScroll(reduced: boolean | null, delay = 0) {
-  if (reduced) return {}
+  if (reduced) {
+    return {
+      initial: { opacity: 0 },
+      whileInView: { opacity: 1 },
+      viewport: { once: true, margin: "-80px" },
+      transition: { duration: 0.4, ease: EASE },
+    }
+  }
   return {
     initial: { opacity: 0, y: 20 },
     whileInView: { opacity: 1, y: 0 },
@@ -50,6 +66,27 @@ const heroItem: Variants = {
   },
 }
 
+/** Word-by-word stagger for the hero headline specifically. */
+const headlineWordStagger: Variants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.06, delayChildren: 0.15 },
+  },
+}
+
+const headlineWordItem: Variants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.5, ease: EASE },
+  },
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max)
+}
+
 /* ─── Feature card data ──────────────────────────────────────────────────── */
 
 const features = [
@@ -58,6 +95,7 @@ const features = [
     description:
       "Scores your resume against ATS criteria and surfaces specific improvements for your target role.",
     colorVariant: "amber" as const,
+    category: "Resume",
     icon: FileText,
   },
   {
@@ -65,6 +103,7 @@ const features = [
     description:
       "Compares your resume against the job descriptions you upload and ranks your top 3 career fits by match percentage.",
     colorVariant: "sage" as const,
+    category: "Match",
     icon: Briefcase,
   },
   {
@@ -72,6 +111,7 @@ const features = [
     description:
       "Drops you into a realistic workplace scenario for your chosen career — 5–10 conversational turns of actual role experience.",
     colorVariant: "lavender" as const,
+    category: "Experience",
     icon: Sparkles,
   },
   {
@@ -79,6 +119,7 @@ const features = [
     description:
       "Answers your career questions using your own resume data, match analysis, and simulation results — grounded in your context only.",
     colorVariant: "lavender" as const,
+    category: "Mentor",
     icon: Users,
   },
   {
@@ -86,62 +127,35 @@ const features = [
     description:
       "Builds a 3-month plan with weekly goals, curated resources, and practice tasks based on your specific skill gaps.",
     colorVariant: "sky" as const,
+    category: "Roadmap",
     icon: Map,
   },
 ]
 
-const howItWorksSteps = [
-  {
-    icon: Upload,
-    label: "Upload Resume",
-    detail: "Drop your PDF resume to start.",
-  },
-  {
-    icon: BrainCircuit,
-    label: "AI Analysis",
-    detail: "AI scores it and extracts your skills.",
-  },
-  {
-    icon: Briefcase,
-    label: "Top 3 Matches",
-    detail: "Ranked against your uploaded job descriptions.",
-  },
-  {
-    icon: Sparkles,
-    label: "Experience a Role",
-    detail: "Simulate a workday for your chosen career.",
-  },
-  {
-    icon: Map,
-    label: "Learning Roadmap",
-    detail: "Get a 3-month plan tailored to your gaps.",
-  },
-]
+/* ─── Ambient background orbs (animation #4) ────────────────────────────── */
 
-/* ─── Glow blobs ─────────────────────────────────────────────────────────── */
-
-function GlowBlobs({ reduced }: { reduced: boolean | null }) {
+function AmbientOrbs({ reduced }: { reduced: boolean | null }) {
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+    <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden" aria-hidden>
       <div
-        className="cv-glow-blob cv-glow-blob--a -left-28 -top-20 size-[26rem] md:size-[32rem]"
+        className="cv-landing-orb cv-landing-orb--a -left-28 -top-20 size-[26rem] md:size-[32rem]"
         style={reduced ? { animation: "none" } : undefined}
       />
       <div
-        className="cv-glow-blob cv-glow-blob--b -right-24 top-[20%] size-[22rem] md:size-[28rem]"
+        className="cv-landing-orb cv-landing-orb--b -right-24 top-[18%] size-[22rem] md:size-[28rem]"
         style={reduced ? { animation: "none" } : undefined}
       />
       <div
-        className="cv-glow-blob cv-glow-blob--c bottom-[-10%] left-[35%] size-[18rem] md:size-[24rem]"
-        style={reduced ? { animation: "none", opacity: 0.28 } : undefined}
+        className="cv-landing-orb cv-landing-orb--c bottom-[-12%] left-[38%] size-[18rem] md:size-[24rem]"
+        style={reduced ? { animation: "none" } : undefined}
       />
     </div>
   )
 }
 
-/* ─── Animated CTA ───────────────────────────────────────────────────────── */
+/* ─── Hero CTA with magnetic hover (animation #2) ────────────────────────── */
 
-function MotionCta({
+function MagneticCta({
   href,
   children,
   variant = "primary",
@@ -153,25 +167,48 @@ function MotionCta({
   reduced: boolean | null
 }) {
   const isPrimary = variant === "primary"
+  const MAX_OFFSET = 10
+  const PULL_STRENGTH = 0.35
+
+  const x = useMotionValue(0)
+  const y = useMotionValue(0)
+  const springX = useSpring(x, { stiffness: 220, damping: 20, mass: 0.3 })
+  const springY = useSpring(y, { stiffness: 220, damping: 20, mass: 0.3 })
+
+  function handleMouseMove(event: ReactMouseEvent<HTMLAnchorElement>) {
+    if (reduced) return
+    const rect = event.currentTarget.getBoundingClientRect()
+    const relX = event.clientX - (rect.left + rect.width / 2)
+    const relY = event.clientY - (rect.top + rect.height / 2)
+    x.set(clamp(relX * PULL_STRENGTH, -MAX_OFFSET, MAX_OFFSET))
+    y.set(clamp(relY * PULL_STRENGTH, -MAX_OFFSET, MAX_OFFSET))
+  }
+
+  function handleMouseLeave() {
+    x.set(0)
+    y.set(0)
+  }
 
   return (
     <motion.a
       href={href}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
       className="inline-flex items-center gap-2 rounded-full px-7 py-3.5 font-semibold focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--cv-accent)]"
       style={{
-        background: isPrimary ? "var(--cv-ink)" : "rgba(255,255,255,0.72)",
-        color: isPrimary ? "#FFFFFF" : "var(--cv-ink)",
-        border: isPrimary ? "none" : "1px solid rgba(17,24,39,0.14)",
+        background: isPrimary
+          ? "linear-gradient(135deg, #8B7CFF 0%, #A78BFA 55%, #C4B5FD 100%)"
+          : "rgba(255,255,255,0.06)",
+        color: isPrimary ? "#0B0A14" : "var(--cv-ink)",
+        border: isPrimary ? "none" : "1px solid rgba(255,255,255,0.14)",
         fontFamily: "var(--cv-font-sans)",
         fontSize: "var(--cv-text-body)",
-        boxShadow: isPrimary ? "var(--cv-shadow-card)" : undefined,
+        boxShadow: isPrimary ? "0 10px 30px rgba(139,124,255,0.35)" : undefined,
+        x: reduced ? 0 : springX,
+        y: reduced ? 0 : springY,
       }}
-      whileHover={
-        reduced
-          ? undefined
-          : { y: -2, scale: 1.02, transition: { duration: 0.18, ease: EASE } }
-      }
-      whileTap={reduced ? undefined : { scale: 0.98 }}
+      whileHover={reduced ? undefined : { scale: 1.03, transition: { duration: 0.18, ease: EASE } }}
+      whileTap={reduced ? undefined : { scale: 0.97 }}
     >
       {children}
     </motion.a>
@@ -183,9 +220,10 @@ function MotionCta({
 function Navbar() {
   return (
     <header
-      className="sticky top-0 z-50 w-full border-b border-black/[0.05]"
+      className="sticky top-0 z-50 w-full border-b"
       style={{
-        background: "rgba(250, 250, 252, 0.85)",
+        background: "rgba(11, 10, 20, 0.78)",
+        borderColor: "rgba(255,255,255,0.06)",
         backdropFilter: "blur(12px)",
       }}
     >
@@ -209,8 +247,8 @@ function Navbar() {
           <span
             className="rounded-full px-2 py-0.5 text-xs font-bold tracking-widest"
             style={{
-              color: "var(--cv-accent)",
-              background: "var(--cv-accent-muted)",
+              color: "var(--cv-accent-2)",
+              background: "var(--cv-accent-soft)",
               fontFamily: "var(--cv-font-sans)",
             }}
           >
@@ -219,31 +257,26 @@ function Navbar() {
         </a>
 
         <nav className="hidden items-center gap-8 sm:flex" aria-label="Main navigation">
-          {[
-            { label: "Features", href: "#features" },
-            { label: "How It Works", href: "#how-it-works" },
-          ].map(({ label, href }) => (
-            <a
-              key={label}
-              href={href}
-              className="transition-colors duration-150 hover:text-[var(--cv-ink)] focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--cv-accent)]"
-              style={{
-                fontFamily: "var(--cv-font-sans)",
-                fontSize: "var(--cv-text-small)",
-                fontWeight: 500,
-                color: "var(--cv-ink-muted)",
-              }}
-            >
-              {label}
-            </a>
-          ))}
+          <a
+            href="#features"
+            className="transition-colors duration-150 hover:text-[var(--cv-ink)] focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--cv-accent)]"
+            style={{
+              fontFamily: "var(--cv-font-sans)",
+              fontSize: "var(--cv-text-small)",
+              fontWeight: 500,
+              color: "var(--cv-ink-muted)",
+            }}
+          >
+            Features
+          </a>
         </nav>
 
         <a
           href="/signup"
-          className="rounded-full px-5 py-2.5 font-semibold text-white transition-opacity duration-150 hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--cv-accent)]"
+          className="rounded-full px-5 py-2.5 font-semibold transition-opacity duration-150 hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--cv-accent)]"
           style={{
-            background: "var(--cv-ink)",
+            background: "var(--cv-accent)",
+            color: "#FFFFFF",
             fontFamily: "var(--cv-font-sans)",
             fontSize: "var(--cv-text-small)",
           }}
@@ -257,6 +290,9 @@ function Navbar() {
 
 /* ─── Hero ───────────────────────────────────────────────────────────────── */
 
+const heroLineOne = ["Discover.", "Experience."]
+const heroLineTwo = ["Build", "Your", "Career."]
+
 function HeroSection() {
   const reduced = useReducedMotion()
 
@@ -264,14 +300,16 @@ function HeroSection() {
     <section
       className="relative isolate flex min-h-[90svh] flex-col items-center justify-center overflow-hidden px-6 py-24 text-center"
       aria-labelledby="hero-headline"
+      style={{ background: "var(--cv-bg)" }}
     >
-      <GlowBlobs reduced={reduced} />
+      <AmbientOrbs reduced={reduced} />
 
       <motion.div
         className="relative z-[1] mx-auto flex max-w-4xl flex-col items-center"
         variants={reduced ? undefined : heroStagger}
-        initial={reduced ? undefined : "hidden"}
-        animate={reduced ? undefined : "visible"}
+        initial={reduced ? { opacity: 0 } : "hidden"}
+        animate={reduced ? { opacity: 1 } : "visible"}
+        transition={reduced ? { duration: 0.5, ease: EASE } : undefined}
       >
         <motion.p
           variants={reduced ? undefined : heroItem}
@@ -290,8 +328,8 @@ function HeroSection() {
             className="ml-2 align-middle text-xs font-bold tracking-widest"
             style={{
               fontFamily: "var(--cv-font-sans)",
-              color: "var(--cv-accent)",
-              background: "var(--cv-accent-muted)",
+              color: "var(--cv-accent-2)",
+              background: "var(--cv-accent-soft)",
               borderRadius: 9999,
               padding: "0.2rem 0.55rem",
             }}
@@ -300,22 +338,41 @@ function HeroSection() {
           </span>
         </motion.p>
 
+        {/* Animation #1: hero headline, word-by-word fade + slide-up */}
         <motion.h1
           id="hero-headline"
-          variants={reduced ? undefined : heroItem}
-          className="max-w-4xl"
+          className="cv-landing-gradient-text max-w-4xl"
           style={{
             fontFamily: "var(--cv-font-serif)",
             fontSize: "var(--cv-text-display)",
             fontWeight: 400,
             lineHeight: 1.08,
             letterSpacing: "-0.02em",
-            color: "var(--cv-ink)",
           }}
+          variants={reduced ? undefined : headlineWordStagger}
+          initial={reduced ? { opacity: 0 } : "hidden"}
+          animate={reduced ? { opacity: 1 } : "visible"}
+          transition={reduced ? { duration: 0.5, ease: EASE, delay: 0.1 } : undefined}
         >
-          Discover. Experience.
+          {heroLineOne.map((word, i) => (
+            <motion.span
+              key={`l1-${i}`}
+              variants={reduced ? undefined : headlineWordItem}
+              style={{ display: "inline-block", marginRight: "0.28em" }}
+            >
+              {word}
+            </motion.span>
+          ))}
           <br className="hidden sm:block" />
-          Build Your Career.
+          {heroLineTwo.map((word, i) => (
+            <motion.span
+              key={`l2-${i}`}
+              variants={reduced ? undefined : headlineWordItem}
+              style={{ display: "inline-block", marginRight: "0.28em" }}
+            >
+              {word}
+            </motion.span>
+          ))}
         </motion.h1>
 
         <motion.p
@@ -338,13 +395,13 @@ function HeroSection() {
           variants={reduced ? undefined : heroItem}
           className="mt-10 flex flex-wrap items-center justify-center gap-4"
         >
-          <MotionCta href="/signup" reduced={reduced}>
+          <MagneticCta href="/signup" reduced={reduced}>
             Start Exploring
             <ArrowRight className="h-4 w-4" strokeWidth={2} />
-          </MotionCta>
-          <MotionCta href="#how-it-works" variant="secondary" reduced={reduced}>
-            How it works
-          </MotionCta>
+          </MagneticCta>
+          <MagneticCta href="#features" variant="secondary" reduced={reduced}>
+            See Features
+          </MagneticCta>
         </motion.div>
       </motion.div>
     </section>
@@ -363,17 +420,19 @@ function FeaturesSection() {
       id="features"
       className="relative mx-auto w-full max-w-6xl px-6 py-24"
       aria-labelledby="features-heading"
+      style={{ background: "var(--cv-bg)" }}
       {...makeScroll(reduced)}
     >
       <motion.div className="mb-14 text-center" {...makeScroll(reduced)}>
         <h2
           id="features-heading"
+          className="cv-landing-gradient-text"
           style={{
             fontFamily: "var(--cv-font-serif)",
             fontSize: "var(--cv-text-h1)",
             fontWeight: 400,
             lineHeight: 1.15,
-            color: "var(--cv-ink)",
+            display: "inline-block",
           }}
         >
           Everything you need to choose confidently
@@ -392,11 +451,12 @@ function FeaturesSection() {
         </p>
       </motion.div>
 
+      {/* Animation #3: staggered scroll-triggered card reveal, triggerOnce */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {topRow.map((card, i) => (
           <motion.div
             key={card.title}
-            {...makeScroll(reduced, i * 0.08)}
+            {...makeScroll(reduced, i * 0.1)}
             whileHover={
               reduced
                 ? undefined
@@ -404,7 +464,7 @@ function FeaturesSection() {
             }
             style={{ willChange: "transform" }}
           >
-            <FeatureCard {...card} className="h-full" />
+            <FeatureCard {...card} category={card.category} className="h-full" />
           </motion.div>
         ))}
       </div>
@@ -413,7 +473,7 @@ function FeaturesSection() {
         {bottomRow.map((card, i) => (
           <motion.div
             key={card.title}
-            {...makeScroll(reduced, (topRow.length + i) * 0.08)}
+            {...makeScroll(reduced, (topRow.length + i) * 0.1)}
             whileHover={
               reduced
                 ? undefined
@@ -421,7 +481,7 @@ function FeaturesSection() {
             }
             style={{ willChange: "transform" }}
           >
-            <FeatureCard {...card} className="h-full" />
+            <FeatureCard {...card} category={card.category} className="h-full" />
           </motion.div>
         ))}
       </div>
@@ -429,147 +489,74 @@ function FeaturesSection() {
   )
 }
 
-/* ─── How It Works ───────────────────────────────────────────────────────── */
+/* ─── Final CTA ──────────────────────────────────────────────────────────── */
 
-function HowItWorksSection() {
+function FinalCtaSection() {
   const reduced = useReducedMotion()
 
   return (
     <section
-      id="how-it-works"
-      className="relative w-full overflow-hidden py-24"
-      aria-labelledby="hiw-heading"
+      className="relative w-full overflow-hidden px-6 py-28"
+      aria-labelledby="final-cta-heading"
+      style={{ background: "var(--cv-bg)" }}
     >
-      {/* Soft section wash + edge glows */}
       <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(180deg, transparent 0%, rgba(237,228,255,0.35) 50%, transparent 100%)",
-        }}
-        aria-hidden
-      />
-      <div
-        className="cv-glow-blob cv-glow-blob--b pointer-events-none absolute -left-20 top-1/3 size-[20rem] opacity-30"
+        className="cv-landing-orb cv-landing-orb--a left-1/2 top-1/2 size-[34rem] -translate-x-1/2 -translate-y-1/2"
         style={reduced ? { animation: "none" } : undefined}
         aria-hidden
       />
 
-      <div className="relative mx-auto max-w-6xl px-6">
-        <motion.div className="mb-16 text-center" {...makeScroll(reduced)}>
-          <h2
-            id="hiw-heading"
+      {/* Animation #5: final CTA — scale + fade entrance, more pronounced
+          than the feature-card reveals since it's the closing moment. */}
+      <motion.div
+        className="relative z-[1] mx-auto flex max-w-2xl flex-col items-center text-center"
+        initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+        whileInView={reduced ? { opacity: 1 } : { opacity: 1, scale: 1 }}
+        viewport={{ once: true, margin: "-100px" }}
+        transition={{ duration: reduced ? 0.5 : 0.7, ease: EASE }}
+      >
+        <h2
+          id="final-cta-heading"
+          className="cv-landing-gradient-text"
+          style={{
+            fontFamily: "var(--cv-font-serif)",
+            fontSize: "var(--cv-text-h1)",
+            fontWeight: 400,
+            lineHeight: 1.15,
+            display: "inline-block",
+          }}
+        >
+          The future of work is Kinetic.
+        </h2>
+        <p
+          className="mx-auto mt-4 max-w-md"
+          style={{
+            fontFamily: "var(--cv-font-sans)",
+            fontSize: "var(--cv-text-body)",
+            lineHeight: 1.7,
+            color: "var(--cv-ink-muted)",
+          }}
+        >
+          Stop guessing your next move. Let AI map the path, simulate the role, and show
+          you exactly what it takes to get there.
+        </p>
+        <div className="mt-9">
+          <a
+            href="/signup"
+            className="inline-flex items-center gap-2 rounded-full px-8 py-3.5 font-semibold transition-opacity duration-150 hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--cv-accent)]"
             style={{
-              fontFamily: "var(--cv-font-serif)",
-              fontSize: "var(--cv-text-h1)",
-              fontWeight: 400,
-              lineHeight: 1.15,
-              color: "var(--cv-ink)",
-            }}
-          >
-            How it works
-          </h2>
-          <p
-            className="mx-auto mt-3 max-w-md"
-            style={{
-              color: "var(--cv-ink-muted)",
+              background: "linear-gradient(135deg, #8B7CFF 0%, #A78BFA 55%, #C4B5FD 100%)",
+              color: "#0B0A14",
               fontFamily: "var(--cv-font-sans)",
               fontSize: "var(--cv-text-body)",
-              lineHeight: 1.6,
+              boxShadow: "0 10px 30px rgba(139,124,255,0.35)",
             }}
           >
-            Five steps from resume upload to a personalized roadmap. The whole flow takes
-            under 20 minutes.
-          </p>
-        </motion.div>
-
-        <ol className="flex flex-col items-start gap-8 lg:flex-row lg:items-start lg:gap-0">
-          {howItWorksSteps.map((step, i) => {
-            const isLast = i === howItWorksSteps.length - 1
-
-            return (
-              <motion.li
-                key={step.label}
-                className="flex flex-1 flex-row items-start gap-4 lg:flex-col lg:items-center lg:text-center"
-                {...makeScroll(reduced, i * 0.09)}
-              >
-                <div className="flex flex-col items-center lg:w-full lg:flex-row">
-                  <motion.div
-                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
-                    style={{
-                      background: "var(--cv-accent-muted)",
-                      border: "1.5px solid var(--cv-accent)",
-                    }}
-                    aria-hidden="true"
-                    whileHover={
-                      reduced
-                        ? undefined
-                        : { scale: 1.08, transition: { duration: 0.18 } }
-                    }
-                  >
-                    <step.icon
-                      className="h-5 w-5"
-                      style={{ color: "var(--cv-accent)" }}
-                      strokeWidth={1.8}
-                    />
-                  </motion.div>
-
-                  {!isLast && (
-                    <div
-                      className="hidden w-full border-t border-dashed lg:block"
-                      style={{ borderColor: "rgba(124, 58, 237, 0.28)" }}
-                      aria-hidden="true"
-                    />
-                  )}
-                  {!isLast && (
-                    <div
-                      className="ml-[23px] mt-2 h-8 border-l border-dashed lg:hidden"
-                      style={{ borderColor: "rgba(124, 58, 237, 0.28)" }}
-                      aria-hidden="true"
-                    />
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-1 pb-2 lg:mt-4 lg:items-center lg:px-2">
-                  <span
-                    className="mb-1 w-fit rounded-full px-2.5 py-0.5 text-center"
-                    style={{
-                      background: "var(--cv-accent-muted)",
-                      color: "var(--cv-accent)",
-                      fontFamily: "var(--cv-font-sans)",
-                      fontSize: "var(--cv-text-caption)",
-                      fontWeight: 600,
-                    }}
-                  >
-                    Step {i + 1}
-                  </span>
-                  <span
-                    style={{
-                      fontFamily: "var(--cv-font-serif)",
-                      fontSize: "var(--cv-text-h3)",
-                      fontWeight: 500,
-                      lineHeight: 1.3,
-                      color: "var(--cv-ink)",
-                    }}
-                  >
-                    {step.label}
-                  </span>
-                  <span
-                    style={{
-                      color: "var(--cv-ink-muted)",
-                      fontFamily: "var(--cv-font-sans)",
-                      fontSize: "var(--cv-text-small)",
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    {step.detail}
-                  </span>
-                </div>
-              </motion.li>
-            )
-          })}
-        </ol>
-      </div>
+            Get Started
+            <ArrowRight className="h-4 w-4" strokeWidth={2} />
+          </a>
+        </div>
+      </motion.div>
     </section>
   )
 }
@@ -581,8 +568,8 @@ function Footer() {
 
   return (
     <motion.footer
-      className="w-full border-t border-black/[0.06] px-6 py-12"
-      style={{ background: "var(--cv-bg)" }}
+      className="w-full border-t px-6 py-12"
+      style={{ background: "var(--cv-bg)", borderColor: "rgba(255,255,255,0.06)" }}
       aria-label="Site footer"
       {...makeScroll(reduced)}
     >
@@ -602,8 +589,8 @@ function Footer() {
             <span
               className="rounded-full px-2 py-0.5 text-xs font-bold tracking-widest"
               style={{
-                color: "var(--cv-accent)",
-                background: "var(--cv-accent-muted)",
+                color: "var(--cv-accent-2)",
+                background: "var(--cv-accent-soft)",
                 fontFamily: "var(--cv-font-sans)",
               }}
             >
@@ -626,7 +613,6 @@ function Footer() {
           <ul className="flex flex-wrap justify-center gap-6 sm:justify-end">
             {[
               { label: "Features", href: "#features" },
-              { label: "How It Works", href: "#how-it-works" },
               { label: "Sign Up", href: "/signup" },
             ].map(({ label, href }) => (
               <li key={label}>
@@ -648,7 +634,10 @@ function Footer() {
         </nav>
       </div>
 
-      <div className="mx-auto mt-10 max-w-6xl border-t border-black/[0.06] pt-6 text-center">
+      <div
+        className="mx-auto mt-10 max-w-6xl border-t pt-6 text-center"
+        style={{ borderColor: "rgba(255,255,255,0.06)" }}
+      >
         <p
           style={{
             color: "var(--cv-ink-muted)",
@@ -667,12 +656,17 @@ function Footer() {
 
 export function LandingPage() {
   return (
-    <div className="min-h-screen w-full overflow-x-hidden" style={{ background: "var(--cv-bg)" }}>
+    <div
+      className="cv-landing min-h-screen w-full overflow-x-hidden"
+      style={{ background: "var(--cv-bg)" }}
+    >
       <Navbar />
       <main>
+        {/* Animated career tiles intro — full screen before the hero */}
+        <CareerTilesIntro />
         <HeroSection />
         <FeaturesSection />
-        <HowItWorksSection />
+        <FinalCtaSection />
       </main>
       <Footer />
     </div>

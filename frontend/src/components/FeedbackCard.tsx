@@ -42,22 +42,22 @@ export function FeedbackCard({
   const items = [
     {
       icon: CheckCircle2,
-      iconColor: "#22C55E",
-      bg: "var(--cv-card-sage)",
+      iconColor: "var(--cv-accent)",
+      bg: "var(--cv-card-surface)",
       label: "What you did well",
       content: feedback.positive,
     },
     {
       icon: Lightbulb,
-      iconColor: "#F59E0B",
-      bg: "var(--cv-card-amber)",
+      iconColor: "var(--cv-accent)",
+      bg: "var(--cv-card-surface)",
       label: "One improvement",
       content: feedback.improvement,
     },
     {
       icon: BookOpen,
-      iconColor: "#6B7FFF",
-      bg: "var(--cv-card-sky)",
+      iconColor: "var(--cv-accent)",
+      bg: "var(--cv-card-surface)",
       label: "Why this matters",
       content: feedback.real_world_importance,
     },
@@ -80,12 +80,13 @@ export function FeedbackCard({
             variants={itemVariants}
             initial="hidden"
             animate="visible"
-            className="rounded-[var(--cv-radius-card)] p-4"
-            style={{ background: item.bg, boxShadow: "var(--cv-shadow-card)" }}
+            className="cv-card p-4"
+            style={{ background: item.bg }}
           >
             <div className="flex items-start gap-3">
               <div
-                className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-white/60"
+                className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full"
+                style={{ background: "var(--cv-accent-soft)" }}
               >
                 <Icon size={14} strokeWidth={2} style={{ color: item.iconColor }} aria-hidden />
               </div>
@@ -96,7 +97,7 @@ export function FeedbackCard({
                     fontFamily: "var(--cv-font-sans)",
                     fontSize: "var(--cv-text-caption)",
                     fontWeight: 700,
-                    color: "#6B7280",
+                    color: "var(--cv-ink-muted)",
                     textTransform: "uppercase",
                     letterSpacing: "0.05em",
                   }}
@@ -107,7 +108,7 @@ export function FeedbackCard({
                   style={{
                     fontFamily: "var(--cv-font-sans)",
                     fontSize: "var(--cv-text-small)",
-                    color: "#1F2937",
+                    color: "var(--cv-ink-muted)",
                     lineHeight: 1.65,
                   }}
                 >
@@ -124,7 +125,7 @@ export function FeedbackCard({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3, delay: 0.3 }}
-        className="rounded-[var(--cv-radius-card)] bg-white/70 px-4 py-3"
+        className="rounded-[var(--cv-radius-card)] bg-[var(--cv-surface-subtle)] px-4 py-3"
         style={{ boxShadow: "var(--cv-shadow-card)" }}
       >
         <summary
@@ -133,7 +134,7 @@ export function FeedbackCard({
             fontFamily: "var(--cv-font-sans)",
             fontSize: "var(--cv-text-small)",
             fontWeight: 600,
-            color: "#374151",
+            color: "var(--cv-ink)",
           }}
         >
           View model answer
@@ -143,7 +144,7 @@ export function FeedbackCard({
           style={{
             fontFamily: "var(--cv-font-sans)",
             fontSize: "var(--cv-text-small)",
-            color: "#6B7280",
+            color: "var(--cv-ink-muted)",
             lineHeight: 1.65,
           }}
         >

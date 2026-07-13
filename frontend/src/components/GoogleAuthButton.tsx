@@ -22,8 +22,8 @@ export function GoogleAuthButton({
   if (!getGoogleClientId()) {
     return (
       <p
-        className="text-center text-xs text-gray-400"
-        style={{ fontFamily: "var(--cv-font-sans)" }}
+        className="text-center text-xs"
+        style={{ fontFamily: "var(--cv-font-sans)", color: "var(--cv-ink-muted)" }}
       >
         Google sign-in isn&apos;t configured for this environment.
       </p>
@@ -45,11 +45,15 @@ export function GoogleAuthButton({
   }
 
   return (
-    <div className="flex justify-center">
+    // Google's widget renders in its own iframe and always follows the
+    // system/browser color scheme unless explicitly isolated — without this,
+    // it can render with mismatched (e.g. stray blue-tinted) chrome on a dark
+    // page regardless of the `theme` prop below.
+    <div className="flex justify-center" style={{ colorScheme: "light" }}>
       <GoogleLogin
         onSuccess={handleSuccess}
         onError={() => onError("Google sign-in failed. Please try again.")}
-        theme="outline"
+        theme="filled_black"
         shape="pill"
         size="large"
         text="continue_with"

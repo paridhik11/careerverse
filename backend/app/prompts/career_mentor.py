@@ -3,12 +3,12 @@
 Per `.cursorrules`, all prompt strings live exclusively here.
 `app.agents.career_mentor` imports the constants and builder functions
 defined below — it never inlines prompt text. This module contains no
-runtime logic beyond string formatting: no OpenAI calls, no I/O, no DB
+runtime logic beyond string formatting: no Gemini API calls, no I/O, no DB
 access.
 
 Design decisions
 ----------------
-1. **Experienced mentor persona** — GPT-4o is cast as a career mentor with
+1. **Experienced mentor persona** — Gemini is cast as a career mentor with
    15+ years of industry and hiring experience who knows the user's full
    project data. This grounds answers in real career judgment rather than
    generic advice.
@@ -121,9 +121,9 @@ def build_mentor_user_prompt(
     context: str,
     history: list[dict[str, str]],
 ) -> list[dict[str, str]]:
-    """Build the full messages list for the GPT-4o chat completions call.
+    """Build the full messages list for the Gemini chat call.
 
-    Returns a list of OpenAI message dicts:
+    Returns a list of role/content message dicts:
     1. The system message (mentor persona + rules).
     2. A "context injection" user turn that loads the assembled project data.
     3. The recent conversation history (up to the last N turns).
@@ -144,7 +144,7 @@ def build_mentor_user_prompt(
     Returns
     -------
     list[dict[str, str]]
-        Complete messages list to pass to ``AsyncOpenAI.chat.completions.create``.
+        Complete messages list consumed by ``app.agents.career_mentor``.
     """
     context_injection = (
         f"Here is the user's complete CareerVerse project data. Use ONLY this "

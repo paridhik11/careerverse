@@ -67,6 +67,8 @@ const item = {
 interface SkillGapState {
   match?: JobMatch
   resumeId?: number
+  /** When set (e.g. /preview), skip the API and render this content directly. */
+  skillGap?: SkillGapContent
 }
 
 // ---------------------------------------------------------------------------
@@ -74,9 +76,9 @@ interface SkillGapState {
 // ---------------------------------------------------------------------------
 
 function scoreColor(score: number) {
-  if (score >= 70) return { stroke: "#22C55E", text: "#15803D", bg: "#F0FDF4", label: "Strong" }
-  if (score >= 45) return { stroke: "#F59E0B", text: "#B45309", bg: "#FFFBEB", label: "Developing" }
-  return { stroke: "#EF4444", text: "#DC2626", bg: "#FEF2F2", label: "Early stage" }
+  if (score >= 70) return { stroke: "#22C55E", text: "#4ADE80", bg: "rgba(34, 197, 94, 0.14)", label: "Strong" }
+  if (score >= 45) return { stroke: "#F59E0B", text: "#FBBF24", bg: "rgba(245, 158, 11, 0.14)", label: "Developing" }
+  return { stroke: "#EF4444", text: "#F87171", bg: "rgba(239, 68, 68, 0.14)", label: "Early stage" }
 }
 
 // ---------------------------------------------------------------------------
@@ -108,7 +110,7 @@ function CircularScore({ score }: { score: number }) {
             cy="74"
             r={RADIUS}
             fill="none"
-            stroke="#E5E7EB"
+            stroke="rgba(255, 255, 255, 0.12)"
             strokeWidth="11"
           />
           {/* Progress arc */}
@@ -151,7 +153,7 @@ function CircularScore({ score }: { score: number }) {
               fontFamily: "var(--cv-font-sans)",
               fontSize: "0.6875rem",
               fontWeight: 500,
-              color: "#9CA3AF",
+              color: "var(--cv-ink-muted)",
               lineHeight: 1,
               marginTop: 2,
             }}
@@ -186,7 +188,7 @@ function CircularScore({ score }: { score: number }) {
 function Pulse({ className, style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <div
-      className={`animate-pulse rounded-xl bg-gray-200 ${className ?? ""}`}
+      className={`animate-pulse rounded-xl bg-white/10 ${className ?? ""}`}
       style={style}
       aria-hidden
     />
@@ -204,7 +206,7 @@ function SkeletonPage() {
     >
       {/* Hero skeleton */}
       <div
-        className="rounded-[var(--cv-radius-main)] bg-white p-8"
+        className="rounded-[var(--cv-radius-main)] bg-[var(--cv-card-surface)] p-8"
         style={{ boxShadow: "var(--cv-shadow-main)" }}
       >
         <div className="flex flex-col md:flex-row gap-8 items-start">
@@ -228,7 +230,7 @@ function SkeletonPage() {
           <div
             key={i}
             className="rounded-[var(--cv-radius-card)] p-5 space-y-3"
-            style={{ background: "#F9FAFB", boxShadow: "var(--cv-shadow-card)" }}
+            style={{ background: "var(--cv-surface-subtle)", boxShadow: "var(--cv-shadow-card)" }}
           >
             <Pulse style={{ width: "60%", height: 12 }} />
             <div className="flex flex-wrap gap-2">
@@ -242,7 +244,7 @@ function SkeletonPage() {
 
       {/* Steps skeleton */}
       <div
-        className="rounded-[var(--cv-radius-card)] bg-white p-6 space-y-4"
+        className="rounded-[var(--cv-radius-card)] bg-[var(--cv-card-surface)] p-6 space-y-4"
         style={{ boxShadow: "var(--cv-shadow-card)" }}
       >
         <Pulse style={{ width: "40%", height: 14 }} />
@@ -272,7 +274,7 @@ function SectionLabel({ text }: { text: string }) {
         fontFamily: "var(--cv-font-sans)",
         fontSize: "var(--cv-text-caption)",
         fontWeight: 700,
-        color: "#6B7280",
+        color: "var(--cv-ink-muted)",
         textTransform: "uppercase",
         letterSpacing: "0.07em",
       }}
@@ -290,19 +292,19 @@ type ChipVariant = "existing" | "missing-tech" | "missing-soft"
 
 const CHIP_STYLES: Record<ChipVariant, { bg: string; text: string; border: string }> = {
   existing: {
-    bg: "var(--cv-card-sage)",
-    text: "#14532D",
-    border: "var(--cv-card-sage-icon)",
+    bg: "var(--cv-accent-muted)",
+    text: "var(--cv-accent)",
+    border: "var(--cv-accent-soft)",
   },
   "missing-tech": {
-    bg: "var(--cv-card-amber)",
-    text: "#92400E",
-    border: "#F6DC6D",
+    bg: "var(--cv-bg)",
+    text: "var(--cv-ink)",
+    border: "var(--cv-border)",
   },
   "missing-soft": {
-    bg: "var(--cv-card-sky)",
-    text: "#1E40AF",
-    border: "var(--cv-card-sky-icon)",
+    bg: "var(--cv-bg)",
+    text: "var(--cv-ink)",
+    border: "var(--cv-border)",
   },
 }
 
@@ -355,7 +357,7 @@ function SkillsCard({ label, skills, variant, icon, cardBg, emptyMsg }: SkillsCa
           style={{
             fontFamily: "var(--cv-font-sans)",
             fontSize: "var(--cv-text-small)",
-            color: "#9CA3AF",
+            color: "var(--cv-ink-muted)",
             fontStyle: "italic",
           }}
         >
@@ -420,7 +422,7 @@ function TimelineStep({
           style={{
             fontFamily: "var(--cv-font-sans)",
             fontSize: "var(--cv-text-small)",
-            color: "#1F2937",
+            color: "var(--cv-ink-muted)",
             lineHeight: 1.65,
           }}
         >
@@ -450,11 +452,11 @@ function ErrorCard({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.35, ease: EASE }}
-      className="rounded-[var(--cv-radius-main)] bg-white p-10"
+      className="rounded-[var(--cv-radius-main)] bg-[var(--cv-card-surface)] p-10"
       style={{ boxShadow: "var(--cv-shadow-main)" }}
     >
-      <div className="mx-auto mb-5 flex size-14 items-center justify-center rounded-full bg-red-50">
-        <AlertCircle size={26} style={{ color: "#EF4444" }} aria-hidden />
+      <div className="mx-auto mb-5 flex size-14 items-center justify-center rounded-full" style={{ background: "rgba(239, 68, 68, 0.14)" }}>
+        <AlertCircle size={26} style={{ color: "#F87171" }} aria-hidden />
       </div>
       <h2
         className="mb-2 text-center"
@@ -462,7 +464,7 @@ function ErrorCard({
           fontFamily: "var(--cv-font-serif)",
           fontSize: "var(--cv-text-h3)",
           fontWeight: 500,
-          color: "#111827",
+          color: "var(--cv-ink)",
         }}
       >
         Analysis failed
@@ -472,7 +474,7 @@ function ErrorCard({
         style={{
           fontFamily: "var(--cv-font-sans)",
           fontSize: "var(--cv-text-small)",
-          color: "#6B7280",
+          color: "var(--cv-ink-muted)",
           lineHeight: 1.6,
         }}
       >
@@ -517,9 +519,14 @@ export function SkillGapPage() {
   const state = location.state as SkillGapState | null
   const match = state?.match
   const resumeId = state?.resumeId
+  const skillGapFromState = state?.skillGap
 
-  const [phase, setPhase] = useState<"loading" | "done" | "error">("loading")
-  const [skillGap, setSkillGap] = useState<SkillGapContent | null>(null)
+  const [phase, setPhase] = useState<"loading" | "done" | "error">(
+    skillGapFromState ? "done" : "loading",
+  )
+  const [skillGap, setSkillGap] = useState<SkillGapContent | null>(
+    skillGapFromState ?? null,
+  )
   const [gapError, setGapError] = useState<string | null>(null)
 
   const [roadmapPhase, setRoadmapPhase] = useState<"idle" | "loading" | "error">("idle")
@@ -548,8 +555,11 @@ export function SkillGapPage() {
       })
   }
 
-  // Run on mount.
-  useEffect(() => { runAnalysis() }, [resumeId]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Run on mount unless preview/mock content was passed via location.state.
+  useEffect(() => {
+    if (skillGapFromState) return
+    runAnalysis()
+  }, [resumeId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleViewRoadmap() {
     if (!resumeId) return
@@ -590,7 +600,7 @@ export function SkillGapPage() {
             style={{ background: "var(--cv-card-sky-icon)" }}
             aria-hidden
           >
-            <BarChart2 size={22} strokeWidth={1.6} color="#111827" />
+            <BarChart2 size={22} strokeWidth={1.6} color="var(--cv-accent)" />
           </div>
           <div>
             <h1
@@ -598,7 +608,7 @@ export function SkillGapPage() {
                 fontFamily: "var(--cv-font-serif)",
                 fontSize: "var(--cv-text-h1)",
                 fontWeight: 400,
-                color: "#111827",
+                color: "var(--cv-ink)",
                 lineHeight: 1.15,
               }}
             >
@@ -608,7 +618,7 @@ export function SkillGapPage() {
               style={{
                 fontFamily: "var(--cv-font-sans)",
                 fontSize: "var(--cv-text-small)",
-                color: "#6B7280",
+                color: "var(--cv-ink-muted)",
                 marginTop: 2,
               }}
             >
@@ -647,7 +657,7 @@ export function SkillGapPage() {
               {/* ── Hero card: score + career + summary ─────────────────── */}
               <motion.div
                 variants={item}
-                className="rounded-[var(--cv-radius-main)] bg-white overflow-hidden"
+                className="rounded-[var(--cv-radius-main)] bg-[var(--cv-card-surface)] overflow-hidden"
                 style={{ boxShadow: "var(--cv-shadow-main)" }}
               >
                 {/* Career title strip */}
@@ -662,7 +672,7 @@ export function SkillGapPage() {
                     <CheckCircle2
                       size={18}
                       strokeWidth={2.5}
-                      style={{ color: "#2563EB", flexShrink: 0 }}
+                      style={{ color: "var(--cv-accent)", flexShrink: 0 }}
                       aria-hidden
                     />
                     <div className="min-w-0">
@@ -671,7 +681,7 @@ export function SkillGapPage() {
                           fontFamily: "var(--cv-font-sans)",
                           fontSize: "var(--cv-text-caption)",
                           fontWeight: 700,
-                          color: "#1D4ED8",
+                          color: "var(--cv-accent-2)",
                           textTransform: "uppercase",
                           letterSpacing: "0.06em",
                         }}
@@ -684,7 +694,7 @@ export function SkillGapPage() {
                           fontFamily: "var(--cv-font-serif)",
                           fontSize: "var(--cv-text-h3)",
                           fontWeight: 500,
-                          color: "#111827",
+                          color: "var(--cv-ink)",
                         }}
                       >
                         {match.role_title}
@@ -694,12 +704,12 @@ export function SkillGapPage() {
                     <span
                       className="ml-auto shrink-0 rounded-full px-3 py-1"
                       style={{
-                        background: "white",
+                        background: "var(--cv-surface-subtle)",
                         border: "1.5px solid var(--cv-card-sky-icon)",
                         fontFamily: "var(--cv-font-sans)",
                         fontSize: "var(--cv-text-caption)",
                         fontWeight: 700,
-                        color: "#1D4ED8",
+                        color: "var(--cv-accent-2)",
                         whiteSpace: "nowrap",
                       }}
                     >
@@ -718,7 +728,7 @@ export function SkillGapPage() {
                       style={{
                         fontFamily: "var(--cv-font-sans)",
                         fontSize: "var(--cv-text-caption)",
-                        color: "#9CA3AF",
+                        color: "var(--cv-ink-muted)",
                         maxWidth: 148,
                       }}
                     >
@@ -740,7 +750,7 @@ export function SkillGapPage() {
                           fontFamily: "var(--cv-font-sans)",
                           fontSize: "var(--cv-text-caption)",
                           fontWeight: 700,
-                          color: "#6B7280",
+                          color: "var(--cv-ink-muted)",
                           textTransform: "uppercase",
                           letterSpacing: "0.07em",
                         }}
@@ -752,7 +762,7 @@ export function SkillGapPage() {
                       style={{
                         fontFamily: "var(--cv-font-sans)",
                         fontSize: "var(--cv-text-body)",
-                        color: "#1F2937",
+                        color: "var(--cv-ink-muted)",
                         lineHeight: 1.75,
                       }}
                     >
@@ -765,19 +775,19 @@ export function SkillGapPage() {
                         {
                           count: skillGap.existing_skills.length,
                           label: "Skills matched",
-                          color: "#16A34A",
+                          color: "#4ADE80",
                           bg: "var(--cv-card-sage)",
                         },
                         {
                           count: skillGap.missing_technical_skills.length,
                           label: "Tech gaps",
-                          color: "#B45309",
+                          color: "#FBBF24",
                           bg: "var(--cv-card-amber)",
                         },
                         {
                           count: skillGap.missing_soft_skills.length,
                           label: "Soft gaps",
-                          color: "#1D4ED8",
+                          color: "var(--cv-accent-2)",
                           bg: "var(--cv-card-sky)",
                         },
                       ].map(({ count, label, color, bg }) => (
@@ -828,7 +838,7 @@ export function SkillGapPage() {
                     <CheckCircle2
                       size={15}
                       strokeWidth={2.5}
-                      style={{ color: "#16A34A", flexShrink: 0, marginBottom: 2 }}
+                      style={{ color: "#4ADE80", flexShrink: 0, marginBottom: 2 }}
                       aria-hidden
                     />
                   }
@@ -844,7 +854,7 @@ export function SkillGapPage() {
                     <Zap
                       size={15}
                       strokeWidth={2.5}
-                      style={{ color: "#B45309", flexShrink: 0, marginBottom: 2 }}
+                      style={{ color: "#FBBF24", flexShrink: 0, marginBottom: 2 }}
                       aria-hidden
                     />
                   }
@@ -860,7 +870,7 @@ export function SkillGapPage() {
                     <Heart
                       size={15}
                       strokeWidth={2.5}
-                      style={{ color: "#1D4ED8", flexShrink: 0, marginBottom: 2 }}
+                      style={{ color: "var(--cv-accent-2)", flexShrink: 0, marginBottom: 2 }}
                       aria-hidden
                     />
                   }
@@ -871,7 +881,7 @@ export function SkillGapPage() {
               {skillGap.recommended_next_steps.length > 0 && (
                 <motion.div
                   variants={item}
-                  className="rounded-[var(--cv-radius-card)] bg-white p-7"
+                  className="rounded-[var(--cv-radius-card)] bg-[var(--cv-card-surface)] p-7"
                   style={{ boxShadow: "var(--cv-shadow-card)" }}
                 >
                   <div className="mb-5 flex items-center gap-2">
@@ -912,7 +922,7 @@ export function SkillGapPage() {
               {/* ── CTA card ────────────────────────────────────────────── */}
               <motion.div
                 variants={item}
-                className="rounded-[var(--cv-radius-main)] bg-white p-10 text-center"
+                className="rounded-[var(--cv-radius-main)] bg-[var(--cv-card-surface)] p-10 text-center"
                 style={{ boxShadow: "var(--cv-shadow-main)" }}
               >
                 <div
@@ -932,7 +942,7 @@ export function SkillGapPage() {
                     fontFamily: "var(--cv-font-serif)",
                     fontSize: "var(--cv-text-h2)",
                     fontWeight: 400,
-                    color: "#111827",
+                    color: "var(--cv-ink)",
                     lineHeight: 1.2,
                   }}
                 >
@@ -944,7 +954,7 @@ export function SkillGapPage() {
                   style={{
                     fontFamily: "var(--cv-font-sans)",
                     fontSize: "var(--cv-text-small)",
-                    color: "#6B7280",
+                    color: "var(--cv-ink-muted)",
                     lineHeight: 1.7,
                   }}
                 >
@@ -952,24 +962,24 @@ export function SkillGapPage() {
                   missing skill above into a concrete month-by-month plan —
                   with topics, projects, resources, and milestones tailored
                   to{" "}
-                  <span style={{ fontWeight: 600, color: "#374151" }}>
+                  <span style={{ fontWeight: 600, color: "var(--cv-ink)" }}>
                     {match ? match.role_title : "your chosen career"}
                   </span>
                   .
                 </p>
 
                 {roadmapError && (
-                  <div className="mx-auto mt-5 flex max-w-sm items-start gap-2 rounded-xl bg-red-50 p-4 text-left">
+                  <div className="mx-auto mt-5 flex max-w-sm items-start gap-2 rounded-xl p-4 text-left" style={{ background: "rgba(239, 68, 68, 0.14)" }}>
                     <AlertCircle
                       size={16}
-                      style={{ color: "#EF4444", flexShrink: 0, marginTop: 1 }}
+                      style={{ color: "#F87171", flexShrink: 0, marginTop: 1 }}
                       aria-hidden
                     />
                     <p
                       style={{
                         fontFamily: "var(--cv-font-sans)",
                         fontSize: "var(--cv-text-small)",
-                        color: "#7F1D1D",
+                        color: "#FCA5A5",
                       }}
                     >
                       {roadmapError}
@@ -1024,7 +1034,7 @@ export function SkillGapPage() {
                     style={{
                       fontFamily: "var(--cv-font-sans)",
                       fontSize: "var(--cv-text-caption)",
-                      color: "#9CA3AF",
+                      color: "var(--cv-ink-muted)",
                     }}
                   >
                     This usually takes 30–60 seconds — hang tight.

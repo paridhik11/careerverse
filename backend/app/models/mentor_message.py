@@ -22,7 +22,7 @@ from app.core.database import Base
 
 MessageRole = Literal["user", "assistant"]
 
-HISTORY_WINDOW = 10  # messages sent to GPT-4o for context continuity
+HISTORY_WINDOW = 10  # messages sent to Gemini for context continuity
 
 
 # ---------------------------------------------------------------------------
@@ -77,10 +77,25 @@ class MentorMessageRecord(BaseModel):
 
 
 class MentorChatRequest(BaseModel):
-    """Request body for POST /career-mentor/chat."""
+    """Request body for POST /career-mentor/chat (resume-scoped)."""
 
     resume_id: int = Field(description="Id of the resume to use as context.")
     message: str = Field(min_length=1, description="The user's message to the mentor.")
+
+
+class MentorGeneralChatRequest(BaseModel):
+    """Request body for POST /career-mentor/chat/general (no resume required).
+
+    Allows the Career Mentor to answer general career questions before the
+    user uploads a resume.  History is passed in-request (not persisted to DB)
+    since there is no resume_id to key persistence on.
+    """
+
+    message: str = Field(min_length=1, description="The user's career question.")
+    history: list[dict[str, str]] = Field(
+        default_factory=list,
+        description="Recent conversation history as role/content dicts.",
+    )
 
 
 class MentorHistoryResponse(BaseModel):

@@ -3,11 +3,11 @@
 Per `.cursorrules`, all prompt strings live exclusively here.
 `app.agents.learning_plan` imports the constants and builder functions defined
 below — it never inlines prompt text. This module contains no runtime logic
-beyond string formatting: no OpenAI calls, no I/O, no DB access.
+beyond string formatting: no Gemini API calls, no I/O, no DB access.
 
 Design decisions
 ----------------
-1. **Experienced Career Coach persona** — The system prompt casts GPT-4o as
+1. **Experienced Career Coach persona** — The system prompt casts Gemini as
    an Experienced Career Coach who designs realistic, month-by-month learning
    plans. The persona focuses on practical outcomes (projects, milestones) over
    theoretical knowledge lists.

@@ -109,6 +109,11 @@ class Resume(Base):
     Populated by `app.services.resume_store_service.ingest_resume`, which
     calls the existing upload and parsing services and stores their output
     here so it can be looked up by id (e.g. for `POST /resumes/{id}/review`).
+
+    `file_hash` is the SHA-256 hex digest of the raw PDF bytes.  It enables
+    hash-based deduplication: if the same PDF is uploaded again, the existing
+    resume row (and its cached AI review) can be reused instead of re-running
+    Gemini.
     """
 
     __tablename__ = "resumes"
@@ -119,6 +124,8 @@ class Resume(Base):
     )
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     file_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    # SHA-256 hex digest of the raw PDF — enables cache lookups.
+    file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     # Stores a `ParsedResume.model_dump()` dict — see `get_parsed_resume`.
     parsed_resume: Mapped[dict] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

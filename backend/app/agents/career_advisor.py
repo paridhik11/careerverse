@@ -1,16 +1,16 @@
 """Career Recommendation Agent.
 
-Sends a parsed resume + RAG-retrieved Job Description context to OpenAI
-GPT-4o and returns exactly three validated, structured career matches
+Sends a parsed resume + RAG-retrieved Job Description context to Gemini
+and returns exactly three validated, structured career matches
 (`CareerAdvisorAgentResponse`). Per `.cursorrules`, this is the only module
-allowed to call OpenAI for career recommendations — routes and services stay
-thin and never talk to the OpenAI SDK directly.
+allowed to call Gemini for career recommendations — routes and services stay
+thin and never talk to the Gemini SDK directly.
 
 Responsibilities:
     - Receive parsed resume text, an optional resume review summary, and the
       Top-K retrieved Job Description chunks from ChromaDB (via
       `app.rag.retriever.retrieve_relevant_job_descriptions`).
-    - Call GPT-4o with the Career Recommendation prompt.
+    - Call Gemini with the Career Recommendation prompt.
     - Validate the JSON response against `CareerAdvisorAgentResponse`.
     - Enforce that every recommendation is grounded in a JD that was actually
       retrieved — the agent never trusts the model to have followed that
@@ -24,7 +24,9 @@ import json
 import re
 from typing import Any
 
-from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI, RateLimitError
+import httpx
+from google import genai
+from google.genai import errors, types
 from pydantic import ValidationError
 
 from app.core.config import settings
@@ -34,7 +36,7 @@ from app.prompts.career_advisor import (
     build_career_advisor_user_prompt,
 )
 
-MODEL_NAME = "gpt-4o"
+MODEL_NAME = "gemini-2.5-flash"
 REQUEST_TIMEOUT_SECONDS = 45.0
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL)
 
@@ -43,35 +45,38 @@ class CareerAdvisorError(Exception):
     """Base class for every Career Recommendation Agent failure."""
 
 
-class OpenAIRequestError(CareerAdvisorError):
-    """The OpenAI API call itself failed (connection, auth, rate limit, server error)."""
+class GeminiRequestError(CareerAdvisorError):
+    """The Gemini API call itself failed (connection, auth, rate limit, server error)."""
 
 
 class CareerAdvisorTimeoutError(CareerAdvisorError):
-    """The OpenAI API call did not complete within `REQUEST_TIMEOUT_SECONDS`."""
+    """The Gemini API call did not complete within `REQUEST_TIMEOUT_SECONDS`."""
 
 
 class InvalidCareerAdvisorResponseError(CareerAdvisorError):
-    """GPT-4o's response could not be parsed into three valid, retrieval-grounded matches."""
+    """Gemini's response could not be parsed into three valid, retrieval-grounded matches."""
 
 
 class NoRetrievedJobDescriptionsError(CareerAdvisorError):
     """There is nothing retrieved from RAG to compare the resume against."""
 
 
-def _get_client() -> AsyncOpenAI:
-    """Build an OpenAI client from the `OPENAI_API_KEY` environment variable.
+def _get_client() -> genai.Client:
+    """Build a Gemini client from the `GEMINI_API_KEY` environment variable.
 
-    Not module-level so tests can monkeypatch `settings.openai_api_key`
+    Not module-level so tests can monkeypatch `settings.gemini_api_key`
     without having to reload this module.
     """
-    return AsyncOpenAI(api_key=settings.openai_api_key, timeout=REQUEST_TIMEOUT_SECONDS)
+    return genai.Client(
+        api_key=settings.gemini_api_key,
+        http_options=types.HttpOptions(timeout=int(REQUEST_TIMEOUT_SECONDS * 1000)),
+    )
 
 
 def _extract_json_object(raw_text: str) -> str:
     """Best-effort extraction of a bare JSON object from the model's raw text.
 
-    `response_format={"type": "json_object"}` should already guarantee bare
+    `response_mime_type="application/json"` should already guarantee bare
     JSON, but this guards against the model wrapping it in a code fence or
     adding stray text anyway, instead of failing the whole request.
     """
@@ -87,7 +92,7 @@ def _extract_json_object(raw_text: str) -> str:
 
 
 def _parse_agent_response(raw_text: str) -> CareerAdvisorAgentResponse:
-    """Parse and validate GPT-4o's raw output into a `CareerAdvisorAgentResponse`."""
+    """Parse and validate Gemini's raw output into a `CareerAdvisorAgentResponse`."""
     candidate = _extract_json_object(raw_text)
 
     try:
@@ -161,12 +166,12 @@ async def generate_career_matches(
     NoRetrievedJobDescriptionsError
         `retrieved_job_descriptions` is empty — there is nothing to compare
         the resume against.
-    OpenAIRequestError
-        The OpenAI API call failed (network, auth, rate limit, server error).
+    GeminiRequestError
+        The Gemini API call failed (network, auth, rate limit, server error).
     CareerAdvisorTimeoutError
-        The OpenAI API call did not complete within the configured timeout.
+        The Gemini API call did not complete within the configured timeout.
     InvalidCareerAdvisorResponseError
-        GPT-4o's response could not be parsed into three valid,
+        Gemini's response could not be parsed into three valid,
         retrieval-grounded matches.
     """
     if not retrieved_job_descriptions:
@@ -183,23 +188,23 @@ async def generate_career_matches(
     )
 
     try:
-        response = await client.chat.completions.create(
+        response = await client.aio.models.generate_content(
             model=MODEL_NAME,
-            temperature=0.3,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": CAREER_ADVISOR_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=CAREER_ADVISOR_SYSTEM_PROMPT,
+                temperature=0.3,
+                response_mime_type="application/json",
+            ),
         )
-    except APITimeoutError as exc:
+    except httpx.TimeoutException as exc:
         raise CareerAdvisorTimeoutError(
-            "Career Recommendation Agent timed out waiting for OpenAI."
+            "Career Recommendation Agent timed out waiting for Gemini."
         ) from exc
-    except (APIConnectionError, RateLimitError, APIError) as exc:
-        raise OpenAIRequestError(f"OpenAI request failed: {exc}") from exc
+    except errors.APIError as exc:
+        raise GeminiRequestError(f"Gemini request failed: {exc}") from exc
 
-    raw_text = response.choices[0].message.content if response.choices else None
+    raw_text = response.text
     if not raw_text:
         raise InvalidCareerAdvisorResponseError(
             "Career Recommendation Agent returned an empty response."

@@ -2,7 +2,7 @@
 
 Orchestrates (per `.cursorrules`, this is the only place this orchestration
 should live — `api/job_matches.py` stays a thin route, and
-`agents/career_advisor.py` only knows how to call OpenAI):
+`agents/career_advisor.py` only knows how to call Gemini):
 
 1. Load the resume by id.
 2. Retrieve the Top-K relevant Job Descriptions from ChromaDB via the

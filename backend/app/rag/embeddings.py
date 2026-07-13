@@ -1,6 +1,6 @@
 """Embedding generation and text chunking for the RAG pipeline.
 
-Uses OpenAI text-embedding-3-small (1 536 dimensions, cheap and fast).
+Uses Gemini ``gemini-embedding-001`` via the google-genai SDK.
 
 Chunking strategy
 -----------------
@@ -23,11 +23,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from openai import AsyncOpenAI, OpenAI
+from google import genai
 
 from app.core.config import settings
 
-EMBEDDING_MODEL = "text-embedding-3-small"
+EMBEDDING_MODEL = "gemini-embedding-001"
 
 # 4 chars ≈ 1 token (rough English heuristic — no tiktoken dependency needed).
 _CHARS_PER_TOKEN = 4
@@ -151,29 +151,41 @@ def _make_chunk(
 # ---------------------------------------------------------------------------
 
 
-def generate_embedding(text: str) -> list[float]:
-    """Return a single embedding vector for *text* using text-embedding-3-small.
+def _get_client() -> genai.Client:
+    return genai.Client(api_key=settings.gemini_api_key)
 
-    Raises openai.OpenAIError on API failure.
+
+def _embedding_values(response: Any) -> list[list[float]]:
+    """Extract embedding vectors from an ``embed_content`` response."""
+    if not response.embeddings:
+        return []
+    return [list(item.values or []) for item in response.embeddings]
+
+
+def generate_embedding(text: str) -> list[float]:
+    """Return a single embedding vector for *text* using gemini-embedding-001.
+
+    Raises google.genai.errors.APIError on API failure.
     """
-    client = OpenAI(api_key=settings.openai_api_key)
-    response = client.embeddings.create(input=text, model=EMBEDDING_MODEL)
-    return response.data[0].embedding
+    client = _get_client()
+    response = client.models.embed_content(model=EMBEDDING_MODEL, contents=text)
+    vectors = _embedding_values(response)
+    if not vectors:
+        raise RuntimeError("Gemini embed_content returned no embeddings.")
+    return vectors[0]
 
 
 def generate_embeddings(texts: list[str]) -> list[list[float]]:
     """Return one embedding vector per item in *texts* (single batched API call).
 
     Returns an empty list when *texts* is empty.
-    Raises openai.OpenAIError on API failure.
+    Raises google.genai.errors.APIError on API failure.
     """
     if not texts:
         return []
-    client = OpenAI(api_key=settings.openai_api_key)
-    response = client.embeddings.create(input=texts, model=EMBEDDING_MODEL)
-    # The API preserves input order but sort defensively.
-    ordered = sorted(response.data, key=lambda item: item.index)
-    return [item.embedding for item in ordered]
+    client = _get_client()
+    response = client.models.embed_content(model=EMBEDDING_MODEL, contents=texts)
+    return _embedding_values(response)
 
 
 # ---------------------------------------------------------------------------
@@ -183,16 +195,22 @@ def generate_embeddings(texts: list[str]) -> list[list[float]]:
 
 async def generate_embedding_async(text: str) -> list[float]:
     """Async variant of generate_embedding."""
-    client = AsyncOpenAI(api_key=settings.openai_api_key)
-    response = await client.embeddings.create(input=text, model=EMBEDDING_MODEL)
-    return response.data[0].embedding
+    client = _get_client()
+    response = await client.aio.models.embed_content(
+        model=EMBEDDING_MODEL, contents=text
+    )
+    vectors = _embedding_values(response)
+    if not vectors:
+        raise RuntimeError("Gemini embed_content returned no embeddings.")
+    return vectors[0]
 
 
 async def generate_embeddings_async(texts: list[str]) -> list[list[float]]:
     """Async variant of generate_embeddings (single batched API call)."""
     if not texts:
         return []
-    client = AsyncOpenAI(api_key=settings.openai_api_key)
-    response = await client.embeddings.create(input=texts, model=EMBEDDING_MODEL)
-    ordered = sorted(response.data, key=lambda item: item.index)
-    return [item.embedding for item in ordered]
+    client = _get_client()
+    response = await client.aio.models.embed_content(
+        model=EMBEDDING_MODEL, contents=texts
+    )
+    return _embedding_values(response)

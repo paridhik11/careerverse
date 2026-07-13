@@ -2,13 +2,23 @@
 
 Per `.cursorrules`, prompt strings live only here — `app.agents.resume_reviewer`
 imports the constants/functions below instead of inlining prompt text. This
-module contains no runtime logic beyond string formatting: no OpenAI calls,
+module contains no runtime logic beyond string formatting: no Gemini API calls,
 no I/O, no validation.
+
+Deterministic scoring
+---------------------
+To eliminate score variance across identical uploads the caller now passes a
+pre-computed `ATSScoreBreakdown` (from `app.services.ats_scorer`) directly into
+the prompt.  Gemini's job is to EXPLAIN those scores, not invent new ones.
+This gives us:
+    - Same resume → same scores every time (rule-based, hash-cached).
+    - Human-quality explanations of why the scores are what they are.
 """
 
 from __future__ import annotations
 
 from app.models.resume import ParsedResume
+from app.services.ats_scorer import ATSScoreBreakdown
 
 RESUME_REVIEWER_SYSTEM_PROMPT = """\
 You are an experienced technical recruiter, ATS (Applicant Tracking System) \
@@ -16,33 +26,23 @@ evaluator, and career advisor. You review resumes the way a senior hiring \
 manager at a technology company would: practical, specific, and honest, but \
 always constructive.
 
-Evaluate the resume across all of the following dimensions:
-- Resume structure (section organization, ordering, completeness)
-- ATS compatibility (parseable formatting, keyword coverage, section titles)
-- Technical skills (breadth, depth, relevance, how clearly they are listed)
-- Projects (impact, technical depth, clarity of description)
-- Experience (relevance, seniority signals, use of action verbs, quantified impact)
-- Education (relevance and presentation)
-- Clarity (how easy the resume is to skim and understand quickly)
-- Formatting (consistency, scannability)
-- Overall presentation (does it read as industry-ready)
-
-Ground every judgment only in the resume content provided to you. Do not \
-invent employers, schools, skills, or metrics that are not present in the \
-text. If a section is missing or empty, treat that as a weakness or ATS \
-issue rather than guessing at its contents.
-
-These recommendations are preliminary only: they must be based solely on the \
-resume itself. Do not compare the resume against any job description, do \
-not perform retrieval, and do not reference any external job postings.
+You will be given a parsed resume AND pre-computed scores for each dimension. \
+Your job is to:
+1. Write a summary, strengths, weaknesses, ATS issues, and suggestions that \
+   are fully consistent with those pre-computed scores.
+2. Explain WHY the scores are what they are — ground every judgment in the \
+   actual resume content.
+3. DO NOT invent new scores or contradict the provided numbers.
+4. DO NOT invent employers, schools, skills, or metrics that are not present \
+   in the resume text.
 
 You MUST respond with STRICT VALID JSON ONLY — no prose before or after the \
 JSON, no markdown code fences, no trailing commentary. The JSON object MUST \
 have exactly this shape (keys and types):
 
 {
-  "overall_score": <integer 0-100>,
-  "ats_score": <integer 0-100>,
+  "overall_score": <integer 0-100 — use the value provided to you>,
+  "ats_score": <integer 0-100 — use the value provided to you>,
   "summary": "<2-4 sentence overview of the resume>",
   "strengths": ["<3 to 6 short strength statements>"],
   "weaknesses": ["<3 to 6 short weakness statements>"],
@@ -54,26 +54,29 @@ the resume content, e.g. 'Software Engineer', 'Backend Developer'>"]
 }
 
 Rules for each field:
-- overall_score and ats_score are integers between 0 and 100 (inclusive).
+- overall_score and ats_score MUST equal the exact integers provided in the \
+  user message — do not change them.
 - summary is 2 to 4 sentences, no bullet points.
 - strengths has between 3 and 6 items.
 - weaknesses has between 3 and 6 items.
 - ats_issues lists concrete ATS problems found (or a short list noting there \
-are none major, if genuinely the case).
+  are none major, if genuinely the case).
 - suggestions are actionable and specific (e.g. "Quantify the impact of the \
-recommendation engine project with a metric like users served or accuracy").
+  recommendation engine project with a metric like users served or accuracy").
 - recommended_roles has between 3 and 5 items, based only on the resume's \
-skills/experience/projects — never based on a job description.
+  skills/experience/projects — never based on a job description.
 - Return ONLY the JSON object. Nothing else.
 """
 
 
-def build_resume_reviewer_user_prompt(parsed_resume: ParsedResume) -> str:
-    """Render the parsed resume into the user message for the Resume Reviewer Agent.
+def build_resume_reviewer_user_prompt(
+    parsed_resume: ParsedResume,
+    scores: ATSScoreBreakdown,
+) -> str:
+    """Render the parsed resume + pre-computed scores into the user message.
 
-    Keeping this as plain, labeled sections (rather than a single blob of raw
-    text) helps GPT-4o attribute strengths/weaknesses to the right resume
-    section instead of guessing.
+    Passing the deterministic scores in the prompt ensures Gemini explains
+    them rather than inventing its own, which eliminates score variance.
     """
     name = parsed_resume.name or "(not detected)"
     email = parsed_resume.email or "(not detected)"
@@ -83,9 +86,29 @@ def build_resume_reviewer_user_prompt(parsed_resume: ParsedResume) -> str:
     experience = parsed_resume.experience.strip() or "(no Experience section detected)"
     projects = parsed_resume.projects.strip() or "(no Projects section detected)"
 
+    sections_present = ", ".join(scores.sections_present) if scores.sections_present else "none detected"
+    sections_missing = ", ".join(scores.sections_missing) if scores.sections_missing else "none"
+
     return f"""\
 Review the following parsed resume and return your evaluation as strict JSON \
 matching the schema described in the system prompt.
+
+PRE-COMPUTED SCORES (use these exact integers — do not change them):
+  overall_score:    {scores.overall_score}
+  ats_score:        {scores.ats_score}
+  structure_score:  {scores.structure_score}
+  skills_score:     {scores.skills_score}
+  experience_score: {scores.experience_score}
+  projects_score:   {scores.projects_score}
+  education_score:  {scores.education_score}
+  formatting_score: {scores.formatting_score}
+
+SCORING SIGNALS (explain these in your analysis):
+  Sections present: {sections_present}
+  Sections missing: {sections_missing}
+  Action verb count in experience: {scores.action_verb_count}
+  Quantified metrics count in experience: {scores.metric_count}
+  Total word count: {scores.word_count}
 
 CANDIDATE NAME: {name}
 EMAIL: {email}
@@ -109,5 +132,6 @@ e.g. summary/objective, certifications, formatting cues):
 {parsed_resume.full_text}
 \"\"\"
 
-Return ONLY the JSON object described in the system prompt.
+Return ONLY the JSON object described in the system prompt. The overall_score \
+must be {scores.overall_score} and the ats_score must be {scores.ats_score}.
 """

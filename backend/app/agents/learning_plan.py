@@ -1,11 +1,11 @@
 """AI Learning Roadmap Agent.
 
 Generates a personalised 3-Month Learning Roadmap for the user's chosen career
-by calling GPT-4o with the selected Job Description, Skill Gap Analysis, and
+by calling Gemini with the selected Job Description, Skill Gap Analysis, and
 resume text.
 
-Per `.cursorrules`, this is the only module that calls OpenAI for roadmap
-generation. Routes and services stay thin and never touch the OpenAI SDK
+Per `.cursorrules`, this is the only module that calls Gemini for roadmap
+generation. Routes and services stay thin and never touch the Gemini SDK
 directly.
 
 The roadmap is grounded exclusively in:
@@ -18,7 +18,7 @@ run against the other two recommendations.
 
 Responsibilities:
     - Accept resume text, JD text, role title, and skill gap summary.
-    - Call GPT-4o with the Learning Plan prompt (system + user).
+    - Call Gemini with the Learning Plan prompt (system + user).
     - Extract and validate the JSON response into `RoadmapContent`.
     - Return the validated `RoadmapContent` — never raw text.
     - Raise descriptive, typed exceptions on every failure path so the
@@ -32,7 +32,9 @@ import json
 import logging
 import re
 
-from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI, RateLimitError
+import httpx
+from google import genai
+from google.genai import errors, types
 from pydantic import ValidationError
 
 from app.core.config import settings
@@ -44,7 +46,7 @@ from app.prompts.learning_plan import (
 
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = "gpt-4o"
+MODEL_NAME = "gemini-2.5-flash"
 
 # Roadmap generation is analytical but benefits from slight creative variety
 # in resource and project suggestions — 0.4 balances precision with diversity.
@@ -66,16 +68,16 @@ class LearningPlanAgentError(Exception):
     """Base class for every Learning Roadmap Agent failure."""
 
 
-class OpenAIRequestError(LearningPlanAgentError):
-    """The OpenAI API call itself failed (connection, auth, rate limit, server error)."""
+class GeminiRequestError(LearningPlanAgentError):
+    """The Gemini API call itself failed (connection, auth, rate limit, server error)."""
 
 
 class LearningPlanAgentTimeoutError(LearningPlanAgentError):
-    """The OpenAI API call did not complete within `REQUEST_TIMEOUT_SECONDS`."""
+    """The Gemini API call did not complete within `REQUEST_TIMEOUT_SECONDS`."""
 
 
 class InvalidLearningPlanResponseError(LearningPlanAgentError):
-    """GPT-4o's response could not be parsed or validated into `RoadmapContent`."""
+    """Gemini's response could not be parsed or validated into `RoadmapContent`."""
 
 
 # ---------------------------------------------------------------------------
@@ -83,19 +85,22 @@ class InvalidLearningPlanResponseError(LearningPlanAgentError):
 # ---------------------------------------------------------------------------
 
 
-def _get_client() -> AsyncOpenAI:
-    """Build an AsyncOpenAI client from settings.
+def _get_client() -> genai.Client:
+    """Build a Gemini client from settings.
 
     Constructed at call time (not module level) so tests can monkeypatch
-    `settings.openai_api_key` without reloading the module.
+    `settings.gemini_api_key` without reloading the module.
     """
-    return AsyncOpenAI(api_key=settings.openai_api_key, timeout=REQUEST_TIMEOUT_SECONDS)
+    return genai.Client(
+        api_key=settings.gemini_api_key,
+        http_options=types.HttpOptions(timeout=int(REQUEST_TIMEOUT_SECONDS * 1000)),
+    )
 
 
 def _extract_json_object(raw_text: str) -> str:
     """Best-effort extraction of a bare JSON object from the model's raw text.
 
-    `response_format={"type": "json_object"}` should guarantee bare JSON,
+    `response_mime_type="application/json"` should guarantee bare JSON,
     but this guard handles the rare case where the model wraps its output in
     a markdown code fence or adds stray commentary — matching the pattern
     used in `app.agents.skill_gap` and `app.agents.career_advisor`.
@@ -115,12 +120,12 @@ def _extract_json_object(raw_text: str) -> str:
 
 
 def _parse_and_validate(raw_text: str) -> RoadmapContent:
-    """Parse GPT-4o's raw text into a validated `RoadmapContent`.
+    """Parse Gemini's raw text into a validated `RoadmapContent`.
 
     Parameters
     ----------
     raw_text:
-        The raw string returned by `response.choices[0].message.content`.
+        The raw string returned by `response.text`.
 
     Returns
     -------
@@ -169,7 +174,7 @@ async def generate_learning_plan(
     """Run the Learning Roadmap Agent for the user's chosen career.
 
     Sends the resume, Job Description, role title, and Skill Gap Analysis
-    to GPT-4o and returns a fully validated `RoadmapContent` with all three
+    to Gemini and returns a fully validated `RoadmapContent` with all three
     months of the personalised learning plan.
 
     The JD is the primary source of truth for role requirements. The Skill Gap
@@ -198,13 +203,13 @@ async def generate_learning_plan(
     Raises
     ------
     InvalidLearningPlanResponseError
-        If required inputs are empty, or if GPT-4o's response cannot be
+        If required inputs are empty, or if Gemini's response cannot be
         parsed or validated.
-    OpenAIRequestError
-        The OpenAI API call failed (network, authentication, rate limit,
+    GeminiRequestError
+        The Gemini API call failed (network, authentication, rate limit,
         or server error).
     LearningPlanAgentTimeoutError
-        The OpenAI API call did not complete within `REQUEST_TIMEOUT_SECONDS`.
+        The Gemini API call did not complete within `REQUEST_TIMEOUT_SECONDS`.
     """
     if not jd_text or not jd_text.strip():
         raise InvalidLearningPlanResponseError(
@@ -237,26 +242,26 @@ async def generate_learning_plan(
     )
 
     try:
-        response = await client.chat.completions.create(
+        response = await client.aio.models.generate_content(
             model=MODEL_NAME,
-            temperature=TEMPERATURE,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": LEARNING_PLAN_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=LEARNING_PLAN_SYSTEM_PROMPT,
+                temperature=TEMPERATURE,
+                response_mime_type="application/json",
+            ),
         )
-    except APITimeoutError as exc:
+    except httpx.TimeoutException as exc:
         raise LearningPlanAgentTimeoutError(
             f"Learning Roadmap Agent timed out generating plan for role '{role_title}'."
         ) from exc
-    except (APIConnectionError, RateLimitError, APIError) as exc:
-        raise OpenAIRequestError(
-            f"OpenAI request failed during roadmap generation for role "
+    except errors.APIError as exc:
+        raise GeminiRequestError(
+            f"Gemini request failed during roadmap generation for role "
             f"'{role_title}': {exc}"
         ) from exc
 
-    raw_text = response.choices[0].message.content if response.choices else None
+    raw_text = response.text
     if not raw_text:
         raise InvalidLearningPlanResponseError(
             f"Learning Roadmap Agent returned an empty response for role '{role_title}'."

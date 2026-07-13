@@ -46,6 +46,7 @@ from app.core.deps import get_current_user
 from app.models.mentor_message import (
     HISTORY_WINDOW,
     MentorChatRequest,
+    MentorGeneralChatRequest,
     MentorHistoryResponse,
     MentorMessage,
     MentorMessageRecord,
@@ -77,7 +78,7 @@ def _get_history(db: Session, resume_id: int, limit: int = HISTORY_WINDOW) -> li
     return list(reversed(rows))
 
 
-def _history_to_openai_dicts(messages: list[MentorMessage]) -> list[dict[str, str]]:
+def _history_to_message_dicts(messages: list[MentorMessage]) -> list[dict[str, str]]:
     """Convert ORM rows to the ``{"role": ..., "content": ...}`` format."""
     return [{"role": m.role, "content": m.content} for m in messages]
 
@@ -145,10 +146,10 @@ async def _sse_generator(
         error_msg = "The mentor took too long to respond. Please try again."
         yield f"data: {json.dumps(error_msg)}\n\n"
         logger.warning("Mentor stream timeout for resume_id=%s: %s", resume_id, exc)
-    except career_mentor_agent.OpenAIRequestError as exc:
+    except career_mentor_agent.GeminiRequestError as exc:
         error_msg = "The mentor encountered an error. Please try again."
         yield f"data: {json.dumps(error_msg)}\n\n"
-        logger.error("Mentor stream OpenAI error for resume_id=%s: %s", resume_id, exc)
+        logger.error("Mentor stream Gemini error for resume_id=%s: %s", resume_id, exc)
 
     yield "data: [DONE]\n\n"
 
@@ -156,6 +157,63 @@ async def _sse_generator(
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/chat/general",
+    summary="Send a message to the Career Mentor without a resume (general career questions).",
+    status_code=status.HTTP_200_OK,
+)
+async def mentor_chat_general(
+    request: MentorGeneralChatRequest,
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Stream the Career Mentor's response to a general career question.
+
+    No resume is required.  The mentor answers from general career knowledge
+    and the user's message only.  History is kept in memory for the session
+    (no DB persistence for general chat — resumeId-scoped chat persists).
+
+    HTTP status codes
+    -----------------
+    - 200: stream started successfully.
+    - 400: message is empty.
+    """
+    if not request.message.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Message cannot be empty.",
+        )
+
+    # General context — no resume data available.
+    general_context = (
+        "The user has not yet uploaded a resume. "
+        "Answer their career question from general knowledge. "
+        "Be helpful, encouraging, and specific. "
+        "If they ask about their own resume or career matches, remind them to upload a resume first."
+    )
+
+    history = request.history or []
+    buffer: list[str] = []
+
+    async def _generator() -> AsyncGenerator[str, None]:
+        async for chunk in _sse_generator(
+            user_message=request.message,
+            resume_id=0,
+            context=general_context,
+            history=history,
+            buffer=buffer,
+        ):
+            yield chunk
+
+    return StreamingResponse(
+        _generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post(
@@ -198,7 +256,7 @@ async def mentor_chat(
 
     # Load recent history for conversational continuity.
     history_rows = _get_history(db, request.resume_id)
-    history = _history_to_openai_dicts(history_rows)
+    history = _history_to_message_dicts(history_rows)
 
     # Buffer accumulates the full response for persistence after streaming.
     buffer: list[str] = []

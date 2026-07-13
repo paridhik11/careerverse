@@ -10,7 +10,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {/* clientId may be "" in environments without Google sign-in configured;
        GoogleAuthButton itself hides the button in that case. */}
-    <GoogleOAuthProvider clientId={getGoogleClientId()}>
+    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
       <BrowserRouter>
         <App />
       </BrowserRouter>

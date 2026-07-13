@@ -2,7 +2,7 @@
 
 Per `.cursorrules`, all orchestration belongs here:
 - `api/learning_roadmap.py` stays a thin HTTP layer.
-- `agents/learning_plan.py` only knows how to call OpenAI.
+- `agents/learning_plan.py` only knows how to call Gemini.
 - This service owns loading, skill gap serialisation, persistence, and error
   mapping.
 
@@ -227,11 +227,11 @@ async def generate_roadmap(
     SkillGapNotFoundError
         No Skill Gap Analysis has been run for the chosen career.
     learning_plan_agent.InvalidLearningPlanResponseError
-        GPT-4o returned a response that could not be parsed or validated.
-    learning_plan_agent.OpenAIRequestError
-        The OpenAI API call failed.
+        Gemini returned a response that could not be parsed or validated.
+    learning_plan_agent.GeminiRequestError
+        The Gemini API call failed.
     learning_plan_agent.LearningPlanAgentTimeoutError
-        The OpenAI API call timed out.
+        The Gemini API call timed out.
     """
     # Step 1: load the chosen career — fail fast if none is selected.
     chosen_match = _load_chosen_job_match(db, resume.id)

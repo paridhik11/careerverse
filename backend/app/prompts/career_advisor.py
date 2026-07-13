@@ -2,7 +2,7 @@
 
 Per `.cursorrules`, prompt strings live only here — `app.agents.career_advisor`
 imports the constants/functions below instead of inlining prompt text. This
-module contains no runtime logic beyond string formatting: no OpenAI calls,
+module contains no runtime logic beyond string formatting: no Gemini API calls,
 no I/O, no validation.
 """
 

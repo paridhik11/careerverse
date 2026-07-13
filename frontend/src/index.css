@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..500&family=Manrope:wght@400;500;600;700&display=swap");
 
 @custom-variant dark (&:is(.dark *));
 
@@ -41,114 +40,99 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* Dark is the only theme in this app (no light/dark toggle exists), so these
+   shadcn semantic tokens live directly in :root rather than behind a .dark
+   class. This is the safety net for any primitive (Label, etc.) that relies
+   on inherited/semantic color rather than an explicit --cv-* token. */
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.145 0.02 290);
+  --foreground: oklch(0.97 0.01 290);
+  --card: oklch(0.19 0.02 290);
+  --card-foreground: oklch(0.97 0.01 290);
+  --popover: oklch(0.19 0.02 290);
+  --popover-foreground: oklch(0.97 0.01 290);
+  --primary: oklch(0.72 0.19 293);
+  --primary-foreground: oklch(0.145 0.02 290);
+  --secondary: oklch(0.26 0.02 290);
+  --secondary-foreground: oklch(0.97 0.01 290);
+  --muted: oklch(0.26 0.02 290);
+  --muted-foreground: oklch(0.7 0.02 290);
+  --accent: oklch(0.26 0.03 293);
+  --accent-foreground: oklch(0.97 0.01 290);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 10%);
+  --ring: oklch(0.72 0.19 293);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar: oklch(0.13 0.02 290);
+  --sidebar-foreground: oklch(0.97 0.01 290);
+  --sidebar-primary: oklch(0.72 0.19 293);
+  --sidebar-primary-foreground: oklch(0.145 0.02 290);
+  --sidebar-accent: oklch(0.26 0.02 290);
+  --sidebar-accent-foreground: oklch(0.97 0.01 290);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.72 0.19 293);
 }
 
 /* ─── CareerVerse Design Tokens ─────────────────────────────────────────────
-   Namespaced --cv-* so they coexist with shadcn tokens without collision.
+   Dark theme: near-black purple/navy canvas, dark elevated cards, violet
+   accent. Namespaced --cv-* so they coexist with shadcn tokens without
+   collision. This is the single palette shared by every page — there is no
+   separate light theme in this app.
    ────────────────────────────────────────────────────────────────────────── */
 :root {
   /* Layout */
   --cv-sidebar-width: 220px;
-  --cv-radius-card: 1.25rem;   /* 20px — journey cards */
-  --cv-radius-main: 1.5rem;    /* 24px — main content shell */
-  --cv-radius-chip: 9999px;    /* pill chips */
+  --cv-navbar-height: 64px;
+  --cv-radius-card: 1.875rem;  /* 30px — floating cards */
+  --cv-radius-main: 2rem;      /* 32px — large shells */
+  --cv-radius-chip: 9999px;    /* pill chips / buttons */
 
   /* Core palette */
-  --cv-sidebar:        #1E2028;
-  --cv-sidebar-text:   #C8CAD4;
-  --cv-sidebar-active: #FFFFFF;
-  --cv-bg:             #EDEAE3;
-  --cv-accent:         #6B7FFF;
-  --cv-accent-muted:   #6B7FFF26; /* accent at ~15% opacity */
+  --cv-sidebar:        #0E0C18;
+  --cv-sidebar-text:   #A3A0B8;
+  --cv-sidebar-active: #F5F3FF;
+  --cv-bg:             #0B0A14; /* near-black, purple/navy tint */
+  --cv-bg-elevated:    #14121F; /* card / panel surface */
+  --cv-ink:            #F5F3FF; /* headings, primary text */
+  --cv-ink-muted:      #A3A0B8; /* body / secondary text */
+  --cv-accent:         #8B7CFF; /* sole primary accent */
+  --cv-accent-2:       #C4B5FD; /* lighter secondary accent (badges, links) */
+  --cv-accent-muted:   rgba(139, 124, 255, 0.14);
+  --cv-accent-soft:    rgba(139, 124, 255, 0.16); /* icon circle fill */
+  --cv-border:         rgba(255, 255, 255, 0.08);
+  --cv-surface-subtle: rgba(255, 255, 255, 0.06); /* dividers, progress tracks */
+  --cv-glow-violet:    #A78BFA;
+  --cv-glow-indigo:    #8B7CFF;
+  --cv-glow-fuchsia:   #C4B5FD;
 
-  /* Pastel card surfaces */
-  --cv-card-amber:     #FEF2BF;
-  --cv-card-amber-icon:#F6DC6D;
-  --cv-card-sage:      #D4EDD8;
-  --cv-card-sage-icon: #9DD4A8;
-  --cv-card-sky:       #D5E8F8;
-  --cv-card-sky-icon:  #93C6ED;
-  --cv-card-lavender:  #E7DDF8;
-  --cv-card-lavender-icon: #C5A8EF;
+  /* Card surface — dark elevated surface for all former pastel variants */
+  --cv-card-surface:   #14121F;
+  --cv-card-amber:     #14121F;
+  --cv-card-amber-icon: rgba(139, 124, 255, 0.16);
+  --cv-card-sage:      #14121F;
+  --cv-card-sage-icon: rgba(139, 124, 255, 0.16);
+  --cv-card-sky:       #14121F;
+  --cv-card-sky-icon:  rgba(139, 124, 255, 0.16);
+  --cv-card-lavender:  #14121F;
+  --cv-card-lavender-icon: rgba(139, 124, 255, 0.16);
 
   /* Status chip colors */
-  --cv-status-ready:      #6B7FFF;
-  --cv-status-progress:   #F59E0B;
-  --cv-status-locked:     #9CA3AF;
+  --cv-status-ready:      #8B7CFF;
+  --cv-status-progress:   #8B7CFF;
+  --cv-status-locked:     #6B7280;
 
   /* Typography families */
   --cv-font-serif: "Fraunces", Georgia, serif;
   --cv-font-sans:  "Manrope", system-ui, sans-serif;
 
   /* Type scale */
-  --cv-text-display:  clamp(2.5rem, 5vw, 3rem);
+  --cv-text-display:  clamp(2.5rem, 5vw, 3.5rem);
   --cv-text-h1:       2.25rem;
   --cv-text-h2:       1.75rem;
   --cv-text-h3:       1.25rem;
@@ -163,9 +147,178 @@
   --cv-space-4: 2rem;
   --cv-space-6: 3rem;
 
-  /* Elevation */
-  --cv-shadow-card: 0 2px 8px 0 rgb(0 0 0 / 0.06);
-  --cv-shadow-main: 0 8px 32px 0 rgb(0 0 0 / 0.10);
+  /* Soft layered elevation — darker + higher-opacity shadows read correctly
+     against a near-black canvas (light-theme rgb(17 24 39) shadows would be
+     invisible here). */
+  --cv-shadow-card:
+    0 1px 2px rgb(0 0 0 / 0.3),
+    0 8px 24px rgb(0 0 0 / 0.4);
+  --cv-shadow-main:
+    0 2px 4px rgb(0 0 0 / 0.35),
+    0 16px 40px rgb(0 0 0 / 0.5);
+}
+
+/* Reusable white floating card surface */
+.cv-card {
+  background: var(--cv-card-surface);
+  border: 1px solid var(--cv-border);
+  border-radius: var(--cv-radius-card);
+  box-shadow: var(--cv-shadow-card);
+}
+
+.cv-icon-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: var(--cv-accent-soft);
+  color: var(--cv-accent);
+}
+
+.cv-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--cv-radius-chip);
+  padding: 0.2rem 0.65rem;
+  background: var(--cv-accent-muted);
+  color: var(--cv-accent);
+  font-family: var(--cv-font-sans);
+  font-size: var(--cv-text-caption);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Soft drifting violet glow blobs — paused when prefers-reduced-motion */
+@keyframes cv-glow-drift-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(4%, 6%) scale(1.08); }
+}
+@keyframes cv-glow-drift-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-5%, -4%) scale(1.06); }
+}
+@keyframes cv-conic-spin {
+  to { transform: rotate(360deg); }
+}
+
+.cv-glow-blob {
+  pointer-events: none;
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  opacity: 0.45;
+}
+
+.cv-glow-blob--a {
+  background: var(--cv-glow-violet);
+  animation: cv-glow-drift-a 18s ease-in-out infinite;
+}
+
+.cv-glow-blob--b {
+  background: var(--cv-glow-indigo);
+  animation: cv-glow-drift-b 22s ease-in-out infinite;
+}
+
+.cv-glow-blob--c {
+  background: var(--cv-glow-fuchsia);
+  animation: cv-glow-drift-a 26s ease-in-out infinite reverse;
+}
+
+.cv-mentor-ring {
+  background: conic-gradient(
+    from 0deg,
+    var(--cv-glow-violet),
+    var(--cv-glow-indigo),
+    var(--cv-glow-fuchsia),
+    var(--cv-glow-violet)
+  );
+  animation: cv-conic-spin 3s linear infinite;
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cv-glow-blob--a,
+  .cv-glow-blob--b,
+  .cv-glow-blob--c,
+  .cv-mentor-ring {
+    animation: none !important;
+  }
+}
+
+/* ─── Landing Page — decorative extras ──────────────────────────────────────
+   The dark palette above is now shared by every page, so Landing just reuses
+   .cv-card / .cv-icon-circle / .cv-badge / var(--cv-ink) etc. directly. Only
+   two things stay Landing-exclusive: the gradient headline treatment and the
+   ambient drifting orbs — scoped under .cv-landing so they can't leak onto
+   any other page.
+   ────────────────────────────────────────────────────────────────────────── */
+.cv-landing {
+  --cv-landing-gradient: linear-gradient(100deg, #8B7CFF 0%, #C4B5FD 55%, #F5F3FF 100%);
+}
+
+/* Gradient-fill headline text — only used on hero + section headlines,
+   body/paragraph copy stays solid var(--cv-ink-muted). */
+.cv-landing-gradient-text {
+  background-image: var(--cv-landing-gradient);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Ambient background orbs — slow drift (16-20s), paused under
+   prefers-reduced-motion. Distinct from .cv-glow-blob so Dashboard's
+   HomeSection (which reuses .cv-glow-blob) is unaffected. */
+@keyframes cv-landing-drift-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(5%, 7%) scale(1.1); }
+}
+@keyframes cv-landing-drift-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-6%, -5%) scale(1.08); }
+}
+@keyframes cv-landing-drift-c {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(4%, -6%) scale(1.06); }
+}
+
+.cv-landing-orb {
+  pointer-events: none;
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(90px);
+  z-index: 0;
+}
+
+.cv-landing-orb--a {
+  background: var(--cv-accent);
+  opacity: 0.35;
+  animation: cv-landing-drift-a 17s ease-in-out infinite;
+}
+
+.cv-landing-orb--b {
+  background: var(--cv-accent-2);
+  opacity: 0.3;
+  animation: cv-landing-drift-b 20s ease-in-out infinite;
+}
+
+.cv-landing-orb--c {
+  background: #F0ABFC;
+  opacity: 0.2;
+  animation: cv-landing-drift-c 16s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cv-landing-orb--a,
+  .cv-landing-orb--b,
+  .cv-landing-orb--c {
+    animation: none !important;
+  }
 }
 
 @layer base {

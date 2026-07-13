@@ -1,18 +1,18 @@
 """AI Job Simulation Agent.
 
 Generates a realistic first-day workplace simulation for a single career
-match by sending the full `JobDescription.parsed_text` to GPT-4o and
+match by sending the full `JobDescription.parsed_text` to Gemini and
 validating the response against `SimulationContent`.
 
-Per `.cursorrules`, this is the only module that calls OpenAI for
+Per `.cursorrules`, this is the only module that calls Gemini for
 simulation generation. Routes and services stay thin and never touch the
-OpenAI SDK directly. The simulation is grounded exclusively in the uploaded
+Gemini SDK directly. The simulation is grounded exclusively in the uploaded
 Job Description — no generic role templates, no hallucinated responsibilities.
 
 Responsibilities:
     - Accept a `role_title` and the full `jd_text` (the matched JD's
       `parsed_text`) as input.
-    - Call GPT-4o with the Simulation Agent prompt.
+    - Call Gemini with the Simulation Agent prompt.
     - Extract and validate the JSON response into `SimulationContent`.
     - Return the validated `SimulationContent` — never raw text.
     - Raise descriptive, typed exceptions on every failure path so the
@@ -29,7 +29,9 @@ import json
 import logging
 import re
 
-from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI, RateLimitError
+import httpx
+from google import genai
+from google.genai import errors, types
 from pydantic import ValidationError
 
 from app.core.config import settings
@@ -41,7 +43,7 @@ from app.prompts.simulation_agent import (
 
 logger = logging.getLogger(__name__)
 
-MODEL_NAME = "gpt-4o"
+MODEL_NAME = "gemini-2.5-flash"
 # Simulation generation involves 5–7 decision points with 2–4 options each,
 # plus evaluation metadata on every option — this is a large, structured
 # response. 90 seconds gives adequate headroom without hanging the request
@@ -65,16 +67,16 @@ class SimulationAgentError(Exception):
     """Base class for every Simulation Agent failure."""
 
 
-class OpenAIRequestError(SimulationAgentError):
-    """The OpenAI API call itself failed (connection, auth, rate limit, server error)."""
+class GeminiRequestError(SimulationAgentError):
+    """The Gemini API call itself failed (connection, auth, rate limit, server error)."""
 
 
 class SimulationAgentTimeoutError(SimulationAgentError):
-    """The OpenAI API call did not complete within `REQUEST_TIMEOUT_SECONDS`."""
+    """The Gemini API call did not complete within `REQUEST_TIMEOUT_SECONDS`."""
 
 
 class InvalidSimulationResponseError(SimulationAgentError):
-    """GPT-4o's response could not be parsed or validated into `SimulationContent`."""
+    """Gemini's response could not be parsed or validated into `SimulationContent`."""
 
 
 # ---------------------------------------------------------------------------
@@ -82,19 +84,22 @@ class InvalidSimulationResponseError(SimulationAgentError):
 # ---------------------------------------------------------------------------
 
 
-def _get_client() -> AsyncOpenAI:
-    """Build an AsyncOpenAI client from settings.
+def _get_client() -> genai.Client:
+    """Build a Gemini client from settings.
 
     Constructed at call time (not module level) so tests can monkeypatch
-    `settings.openai_api_key` without reloading the module.
+    `settings.gemini_api_key` without reloading the module.
     """
-    return AsyncOpenAI(api_key=settings.openai_api_key, timeout=REQUEST_TIMEOUT_SECONDS)
+    return genai.Client(
+        api_key=settings.gemini_api_key,
+        http_options=types.HttpOptions(timeout=int(REQUEST_TIMEOUT_SECONDS * 1000)),
+    )
 
 
 def _extract_json_object(raw_text: str) -> str:
     """Best-effort extraction of a bare JSON object from the model's raw text.
 
-    `response_format={"type": "json_object"}` should guarantee bare JSON,
+    `response_mime_type="application/json"` should guarantee bare JSON,
     but this guard handles the rare case where the model wraps its output in
     a markdown code fence or adds stray commentary anyway — matching the
     pattern used in `app.agents.career_advisor`.
@@ -114,12 +119,12 @@ def _extract_json_object(raw_text: str) -> str:
 
 
 def _parse_and_validate(raw_text: str, role_title: str) -> SimulationContent:
-    """Parse GPT-4o's raw text into a validated `SimulationContent`.
+    """Parse Gemini's raw text into a validated `SimulationContent`.
 
     Parameters
     ----------
     raw_text:
-        The raw string returned by `response.choices[0].message.content`.
+        The raw string returned by `response.text`.
     role_title:
         Included in error messages for debuggability in concurrent runs.
 
@@ -165,7 +170,7 @@ def _parse_and_validate(raw_text: str, role_title: str) -> SimulationContent:
 async def generate_simulation(role_title: str, jd_text: str) -> SimulationContent:
     """Run the Simulation Agent for one career match.
 
-    Sends the role title and full JD text to GPT-4o and returns a
+    Sends the role title and full JD text to Gemini and returns a
     fully validated `SimulationContent`. Designed to be awaited inside
     `asyncio.gather()` in the simulation service for concurrent generation
     of all three simulations.
@@ -185,13 +190,13 @@ async def generate_simulation(role_title: str, jd_text: str) -> SimulationConten
 
     Raises
     ------
-    OpenAIRequestError
-        The OpenAI API call failed (network, authentication, rate limit,
+    GeminiRequestError
+        The Gemini API call failed (network, authentication, rate limit,
         or server error).
     SimulationAgentTimeoutError
-        The OpenAI API call did not complete within `REQUEST_TIMEOUT_SECONDS`.
+        The Gemini API call did not complete within `REQUEST_TIMEOUT_SECONDS`.
     InvalidSimulationResponseError
-        GPT-4o's response could not be parsed or validated.
+        Gemini's response could not be parsed or validated.
     """
     if not jd_text or not jd_text.strip():
         raise InvalidSimulationResponseError(
@@ -205,26 +210,26 @@ async def generate_simulation(role_title: str, jd_text: str) -> SimulationConten
     logger.info("Simulation Agent starting generation for role: '%s'.", role_title)
 
     try:
-        response = await client.chat.completions.create(
+        response = await client.aio.models.generate_content(
             model=MODEL_NAME,
-            temperature=TEMPERATURE,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": SIMULATION_AGENT_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=SIMULATION_AGENT_SYSTEM_PROMPT,
+                temperature=TEMPERATURE,
+                response_mime_type="application/json",
+            ),
         )
-    except APITimeoutError as exc:
+    except httpx.TimeoutException as exc:
         raise SimulationAgentTimeoutError(
             f"Simulation Agent timed out generating simulation for role '{role_title}'."
         ) from exc
-    except (APIConnectionError, RateLimitError, APIError) as exc:
-        raise OpenAIRequestError(
-            f"OpenAI request failed while generating simulation for role "
+    except errors.APIError as exc:
+        raise GeminiRequestError(
+            f"Gemini request failed while generating simulation for role "
             f"'{role_title}': {exc}"
         ) from exc
 
-    raw_text = response.choices[0].message.content if response.choices else None
+    raw_text = response.text
     if not raw_text:
         raise InvalidSimulationResponseError(
             f"Simulation Agent returned an empty response for role '{role_title}'."

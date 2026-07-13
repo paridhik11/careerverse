@@ -14,8 +14,8 @@ Design decisions
 
 2. **No LLM calls** — the assembly is pure DB reads + string formatting.
    The mentor agent (``app.agents.career_mentor``) is the only module that
-   calls OpenAI. This keeps the context service fast and independently
-   testable without mocking OpenAI.
+   calls Gemini. This keeps the context service fast and independently
+   testable without mocking Gemini.
 
 3. **Explicit missing-data annotations** — every optional data source
    (chosen career, skill gap, roadmap) has a clearly labelled "not yet

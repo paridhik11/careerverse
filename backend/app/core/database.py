@@ -9,7 +9,7 @@ stabilizes and multiple environments need controlled, versioned upgrades.
 
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import settings
@@ -29,6 +29,38 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 class Base(DeclarativeBase):
     """Shared declarative base for every SQLAlchemy ORM model."""
+
+
+def ensure_sqlite_schema() -> None:
+    """Add columns that `create_all` cannot patch on an existing SQLite DB.
+
+    `Base.metadata.create_all` only creates missing tables — it never ALTERs
+    existing ones. Local `careerverse.sqlite3` files created before
+    `User.google_id` was added therefore break every auth query with
+    `no such column: users.google_id`, which the browser surfaces as
+    "Failed to fetch" when the 500 response lacks readable CORS/JSON detail.
+    """
+    if not _DATABASE_URL.startswith("sqlite"):
+        return
+
+    with engine.begin() as connection:
+        columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(users)")).fetchall()
+        }
+        if not columns:
+            return
+
+        if "google_id" not in columns:
+            connection.execute(
+                text("ALTER TABLE users ADD COLUMN google_id VARCHAR(255)")
+            )
+            connection.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_id "
+                    "ON users (google_id)"
+                )
+            )
 
 
 def get_db() -> Generator[Session, None, None]:

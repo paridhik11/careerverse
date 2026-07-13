@@ -2,7 +2,7 @@
 
 Per `.cursorrules`, all orchestration belongs here:
 - `api/skill_gap.py` stays a thin HTTP layer.
-- `agents/skill_gap.py` only knows how to call OpenAI.
+- `agents/skill_gap.py` only knows how to call Gemini.
 - This service owns loading, enrichment, persistence, and error mapping.
 
 Flow (see `generate_skill_gap`):
@@ -257,11 +257,11 @@ async def generate_skill_gap(
     JobDescriptionNotFoundError
         The chosen career's Job Description is missing or has no parsed text.
     skill_gap_agent.InvalidSkillGapResponseError
-        GPT-4o returned a response that could not be parsed or validated.
-    skill_gap_agent.OpenAIRequestError
-        The OpenAI API call failed.
+        Gemini returned a response that could not be parsed or validated.
+    skill_gap_agent.GeminiRequestError
+        The Gemini API call failed.
     skill_gap_agent.SkillGapAgentTimeoutError
-        The OpenAI API call timed out.
+        The Gemini API call timed out.
     """
     # Step 1: load the chosen career — fail fast if none is selected.
     chosen_match = _load_chosen_job_match(db, resume.id)

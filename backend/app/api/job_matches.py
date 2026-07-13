@@ -68,7 +68,7 @@ async def create_job_matches(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=str(exc)
         ) from exc
     except (
-        career_advisor.OpenAIRequestError,
+        career_advisor.GeminiRequestError,
         career_advisor.InvalidCareerAdvisorResponseError,
     ) as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc

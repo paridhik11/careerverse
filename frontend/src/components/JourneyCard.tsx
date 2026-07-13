@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils"
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
+/** @deprecated Color variants no longer tint the card — kept for call-site compat. */
 export type ColorVariant = "amber" | "sage" | "sky" | "lavender"
 export type StatusVariant = "ready" | "progress" | "locked"
 
@@ -15,43 +16,22 @@ export interface JourneyCardProps {
   statusLabel: string
   statusVariant?: StatusVariant
   className?: string
-}
-
-/* ─── Token maps ─────────────────────────────────────────────────────────── */
-
-const cardBg: Record<ColorVariant, string> = {
-  amber:    "bg-[#FEF2BF]",
-  sage:     "bg-[#D4EDD8]",
-  sky:      "bg-[#D5E8F8]",
-  lavender: "bg-[#E7DDF8]",
-}
-
-const iconBg: Record<ColorVariant, string> = {
-  amber:    "bg-[#F6DC6D]",
-  sage:     "bg-[#9DD4A8]",
-  sky:      "bg-[#93C6ED]",
-  lavender: "bg-[#C5A8EF]",
-}
-
-const iconColor: Record<ColorVariant, string> = {
-  amber:    "text-amber-800",
-  sage:     "text-green-800",
-  sky:      "text-sky-800",
-  lavender: "text-purple-800",
+  /** Optional small category label overlaid as a badge. */
+  category?: string
 }
 
 const chipStyles: Record<StatusVariant, { dot: string; chip: string }> = {
   ready: {
-    dot:  "bg-[#6B7FFF]",
-    chip: "bg-[#6B7FFF26] text-[#4A5FD4]",
+    dot: "bg-[var(--cv-accent)]",
+    chip: "bg-[var(--cv-accent-muted)] text-[var(--cv-accent)]",
   },
   progress: {
-    dot:  "bg-amber-400",
-    chip: "bg-amber-100 text-amber-700",
+    dot: "bg-[var(--cv-accent)]",
+    chip: "bg-[var(--cv-accent-muted)] text-[var(--cv-accent)]",
   },
   locked: {
-    dot:  "bg-gray-400",
-    chip: "bg-gray-100 text-gray-500",
+    dot: "bg-[var(--cv-ink-muted)]",
+    chip: "bg-[var(--cv-surface-subtle)] text-[var(--cv-ink-muted)]",
   },
 }
 
@@ -60,11 +40,11 @@ const chipStyles: Record<StatusVariant, { dot: string; chip: string }> = {
 export function JourneyCard({
   title,
   description,
-  colorVariant,
   icon: Icon,
   statusLabel,
   statusVariant = "ready",
   className,
+  category,
 }: JourneyCardProps) {
   const { dot, chip } = chipStyles[statusVariant]
 
@@ -74,48 +54,40 @@ export function JourneyCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
       className={cn(
-        "relative flex items-start gap-4 rounded-[1.25rem] p-5",
-        "shadow-[0_2px_8px_0_rgb(0_0_0/0.06)]",
-        "transition-shadow duration-200 hover:shadow-[0_4px_16px_0_rgb(0_0_0/0.10)]",
-        cardBg[colorVariant],
+        "cv-card relative flex items-start gap-4 p-6",
+        "transition-shadow duration-200 hover:shadow-[var(--cv-shadow-main)]",
         className,
       )}
     >
-      {/* Icon circle */}
-      <div
-        className={cn(
-          "flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
-          iconBg[colorVariant],
-        )}
-      >
-        <Icon className={cn("h-5 w-5", iconColor[colorVariant])} strokeWidth={1.8} />
+      <div className="cv-icon-circle">
+        <Icon className="h-5 w-5" strokeWidth={1.8} style={{ color: "var(--cv-accent)" }} />
       </div>
 
-      {/* Text */}
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        {category && <span className="cv-badge w-fit">{category}</span>}
         <span
-          className="leading-snug text-gray-900"
           style={{
             fontFamily: "var(--cv-font-serif)",
             fontSize: "var(--cv-text-h3)",
             fontWeight: 500,
+            color: "var(--cv-ink)",
+            lineHeight: 1.3,
           }}
         >
           {title}
         </span>
         <span
-          className="text-gray-600"
           style={{
             fontFamily: "var(--cv-font-sans)",
             fontSize: "var(--cv-text-small)",
             lineHeight: 1.5,
+            color: "var(--cv-ink-muted)",
           }}
         >
           {description}
         </span>
       </div>
 
-      {/* Status chip */}
       <div
         className={cn(
           "flex shrink-0 items-center gap-1.5 self-center rounded-full px-3 py-1",

@@ -97,11 +97,24 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     }
   }
 
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...rest,
-    headers: requestHeaders,
-    body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
-  })
+  let response: Response
+  try {
+    response = await fetch(`${getApiBaseUrl()}${path}`, {
+      ...rest,
+      headers: requestHeaders,
+      body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
+    })
+  } catch (error) {
+    // Browsers surface CORS failures, refused connections, and DNS errors as
+    // a generic TypeError("Failed to fetch") — replace that with something
+    // actionable so Login/Signup do not look like a silent network black hole.
+    const baseUrl = getApiBaseUrl()
+    const detail =
+      error instanceof Error && error.message && error.message !== "Failed to fetch"
+        ? error.message
+        : `Unable to reach the API at ${baseUrl}. Confirm the backend is running (uvicorn app.main:app --reload) and that VITE_API_URL is correct.`
+    throw new ApiError(detail, 0)
+  }
 
   if (response.status === 401) {
     localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY)
@@ -116,8 +129,18 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   }
 
   if (!response.ok) {
-    const errorBody = await response.json().catch(() => null)
-    const message = extractErrorMessage(errorBody) ?? `Request failed with status ${response.status}.`
+    const rawBody = await response.text().catch(() => "")
+    let errorBody: unknown = null
+    if (rawBody) {
+      try {
+        errorBody = JSON.parse(rawBody) as unknown
+      } catch {
+        errorBody = null
+      }
+    }
+    const message =
+      extractErrorMessage(errorBody) ??
+      (rawBody.trim() || `Request failed with status ${response.status}.`)
     throw new ApiError(message, response.status)
   }
 

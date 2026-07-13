@@ -1,7 +1,7 @@
 """Integration tests for the Career Mentor API.
 
 Uses an in-memory SQLite DB (via the shared `client` fixture from conftest.py)
-and mocks the Career Mentor Agent so no real OpenAI calls are made.
+and mocks the Career Mentor Agent so no real Gemini calls are made.
 
 Tests verify:
 - Conversation history is persisted and returned correctly by

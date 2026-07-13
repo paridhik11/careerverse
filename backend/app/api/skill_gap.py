@@ -4,7 +4,7 @@ Thin HTTP layer only: request/response shaping and translating
 service/agent exceptions into appropriate HTTP status codes. All
 orchestration (loading the chosen career, JD text, optional enrichments,
 running the AI call, persisting results) lives in
-`app.services.skill_gap_service`. All OpenAI logic lives in
+`app.services.skill_gap_service`. All Gemini logic lives in
 `app.agents.skill_gap`.
 
 Endpoint
@@ -76,8 +76,8 @@ async def create_skill_gap(
     - 200: skill gap successfully generated and persisted.
     - 400: no career has been selected yet, or the JD has no text.
     - 404: resume not found or does not belong to the current user.
-    - 502: the OpenAI API call failed or returned an invalid response.
-    - 504: the OpenAI API call timed out.
+    - 502: the Gemini API call failed or returned an invalid response.
+    - 504: the Gemini API call timed out.
     """
     resume: Resume | None = resume_store_service.get_resume_by_id(db, resume_id)
     if resume is None or resume.user_id != current_user.id:
@@ -104,7 +104,7 @@ async def create_skill_gap(
             detail=str(exc),
         ) from exc
     except (
-        skill_gap_agent.OpenAIRequestError,
+        skill_gap_agent.GeminiRequestError,
         skill_gap_agent.InvalidSkillGapResponseError,
     ) as exc:
         raise HTTPException(

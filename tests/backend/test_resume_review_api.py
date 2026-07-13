@@ -1,7 +1,7 @@
 """End-to-end tests for POST /resumes and POST /resumes/{id}/review.
 
 The Resume Reviewer Agent (`app.agents.resume_reviewer.review_resume`) is
-monkeypatched everywhere here so these tests never call OpenAI for real —
+monkeypatched everywhere here so these tests never call Gemini for real —
 agent behavior itself is covered by `test_resume_reviewer_agent.py`.
 """
 
@@ -177,12 +177,12 @@ def test_review_resume_timeout_returns_504(client, tmp_path: Path, monkeypatch: 
     assert response.status_code == 504
 
 
-def test_review_resume_openai_error_returns_502(client, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_review_resume_gemini_error_returns_502(client, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     headers = _auth_headers(client)
     resume_id = _create_resume(client, headers, tmp_path, monkeypatch)
 
     async def fake_review(_parsed_resume):
-        raise resume_reviewer.OpenAIRequestError("boom")
+        raise resume_reviewer.GeminiRequestError("boom")
 
     monkeypatch.setattr(resume_reviewer, "review_resume", fake_review)
 

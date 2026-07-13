@@ -42,6 +42,7 @@ import { FeedbackCard } from "@/components/FeedbackCard"
 import { ProgressIndicator } from "@/components/ProgressIndicator"
 import { TaskCard } from "@/components/TaskCard"
 import { Button } from "@/components/ui/button"
+import { useJourneyProgress } from "@/contexts/JourneyProgressContext"
 import { chooseJobMatch } from "@/services/jobMatches"
 import { ApiError } from "@/services/api"
 import type { VirtualExperienceState } from "@/types"
@@ -51,13 +52,13 @@ const EASE = [0.22, 1, 0.36, 1] as const
 /* ─── Difficulty badge ─────────────────────────────────────────────────── */
 
 const DIFFICULTY_CONFIG: Record<string, { bg: string; text: string }> = {
-  Beginner: { bg: "var(--cv-card-sage)", text: "#166534" },
-  Intermediate: { bg: "var(--cv-card-amber)", text: "#92400E" },
-  Advanced: { bg: "var(--cv-card-lavender)", text: "#5B21B6" },
+  Beginner: { bg: "var(--cv-accent-muted)", text: "var(--cv-accent)" },
+  Intermediate: { bg: "var(--cv-accent-muted)", text: "var(--cv-accent)" },
+  Advanced: { bg: "var(--cv-accent-muted)", text: "var(--cv-accent)" },
 }
 
 function DifficultyBadge({ difficulty }: { difficulty: string }) {
-  const cfg = DIFFICULTY_CONFIG[difficulty] ?? { bg: "#F3F4F6", text: "#6B7280" }
+  const cfg = DIFFICULTY_CONFIG[difficulty] ?? { bg: "var(--cv-surface-subtle)", text: "var(--cv-ink-muted)" }
   return (
     <span
       className="rounded-full px-3 py-0.5"
@@ -106,7 +107,7 @@ function OverviewPanel({
             style={{ background: "var(--cv-card-lavender-icon)" }}
             aria-hidden
           >
-            <Sparkles size={20} strokeWidth={1.8} color="#111827" />
+            <Sparkles size={20} strokeWidth={1.8} color="var(--cv-accent)" />
           </div>
           <div>
             <p
@@ -114,30 +115,30 @@ function OverviewPanel({
                 fontFamily: "var(--cv-font-sans)",
                 fontSize: "var(--cv-text-caption)",
                 fontWeight: 700,
-                color: "#6B7280",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}
-            >
-              Virtual Work Experience
+                color: "var(--cv-ink-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+            }}
+          >
+            Virtual Work Experience
             </p>
             <h1
               style={{
                 fontFamily: "var(--cv-font-serif)",
                 fontSize: "var(--cv-text-h1)",
                 fontWeight: 400,
-                color: "#111827",
-                lineHeight: 1.15,
-              }}
-            >
-              {job_title}
+            color: "var(--cv-ink)",
+              lineHeight: 1.15,
+            }}
+          >
+            {job_title}
             </h1>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <span
             className="flex items-center gap-1.5"
-            style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", color: "#6B7280" }}
+            style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", color: "var(--cv-ink-muted)" }}
           >
             <Clock size={14} strokeWidth={2} aria-hidden />
             {estimated_duration}
@@ -153,29 +154,29 @@ function OverviewPanel({
           style={{ background: "var(--cv-card-sage)", boxShadow: "var(--cv-shadow-card)" }}
         >
           <div className="mb-3 flex items-center gap-2">
-            <Briefcase size={15} strokeWidth={1.8} style={{ color: "#374151" }} aria-hidden />
+            <Briefcase size={15} strokeWidth={1.8} style={{ color: "var(--cv-ink-muted)" }} aria-hidden />
             <span
               style={{
                 fontFamily: "var(--cv-font-sans)",
                 fontSize: "var(--cv-text-caption)",
                 fontWeight: 700,
-                color: "#6B7280",
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-              }}
-            >
-              The Company
+                color: "var(--cv-ink-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+            }}
+          >
+            The Company
             </span>
           </div>
           <p
             style={{
               fontFamily: "var(--cv-font-sans)",
               fontSize: "var(--cv-text-small)",
-              color: "#374151",
-              lineHeight: 1.7,
-            }}
-          >
-            {overview.company_context}
+              color: "var(--cv-ink-muted)",
+            lineHeight: 1.7,
+          }}
+        >
+          {overview.company_context}
           </p>
         </div>
 
@@ -184,29 +185,29 @@ function OverviewPanel({
           style={{ background: "var(--cv-card-sky)", boxShadow: "var(--cv-shadow-card)" }}
         >
           <div className="mb-3 flex items-center gap-2">
-            <Users size={15} strokeWidth={1.8} style={{ color: "#374151" }} aria-hidden />
+            <Users size={15} strokeWidth={1.8} style={{ color: "var(--cv-ink-muted)" }} aria-hidden />
             <span
               style={{
                 fontFamily: "var(--cv-font-sans)",
                 fontSize: "var(--cv-text-caption)",
                 fontWeight: 700,
-                color: "#6B7280",
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-              }}
-            >
-              The Team
+                color: "var(--cv-ink-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+            }}
+          >
+            The Team
             </span>
           </div>
           <p
             style={{
               fontFamily: "var(--cv-font-sans)",
               fontSize: "var(--cv-text-small)",
-              color: "#374151",
-              lineHeight: 1.7,
-            }}
-          >
-            {overview.team_context}
+              color: "var(--cv-ink-muted)",
+            lineHeight: 1.7,
+          }}
+        >
+          {overview.team_context}
           </p>
         </div>
 
@@ -215,60 +216,60 @@ function OverviewPanel({
           style={{ background: "var(--cv-card-amber)", boxShadow: "var(--cv-shadow-card)" }}
         >
           <div className="mb-3 flex items-center gap-2">
-            <Zap size={15} strokeWidth={1.8} style={{ color: "#374151" }} aria-hidden />
+            <Zap size={15} strokeWidth={1.8} style={{ color: "var(--cv-ink-muted)" }} aria-hidden />
             <span
               style={{
                 fontFamily: "var(--cv-font-sans)",
                 fontSize: "var(--cv-text-caption)",
                 fontWeight: 700,
-                color: "#6B7280",
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-              }}
-            >
-              Your Role
+                color: "var(--cv-ink-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+            }}
+          >
+            Your Role
             </span>
           </div>
           <p
             style={{
               fontFamily: "var(--cv-font-sans)",
               fontSize: "var(--cv-text-small)",
-              color: "#374151",
-              lineHeight: 1.7,
-            }}
-          >
-            {overview.your_role}
+              color: "var(--cv-ink-muted)",
+            lineHeight: 1.7,
+          }}
+        >
+          {overview.your_role}
           </p>
         </div>
 
         <div
           className="rounded-[var(--cv-radius-card)] p-5"
-          style={{ background: "#F9FAFB", boxShadow: "var(--cv-shadow-card)" }}
+        style={{ background: "var(--cv-surface-subtle)", boxShadow: "var(--cv-shadow-card)" }}
         >
           <div className="mb-3 flex items-center gap-2">
-            <Briefcase size={15} strokeWidth={1.8} style={{ color: "#374151" }} aria-hidden />
+            <Briefcase size={15} strokeWidth={1.8} style={{ color: "var(--cv-ink-muted)" }} aria-hidden />
             <span
               style={{
                 fontFamily: "var(--cv-font-sans)",
                 fontSize: "var(--cv-text-caption)",
                 fontWeight: 700,
-                color: "#6B7280",
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-              }}
-            >
-              The Project
+                color: "var(--cv-ink-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+            }}
+          >
+            The Project
             </span>
           </div>
           <p
             style={{
               fontFamily: "var(--cv-font-sans)",
               fontSize: "var(--cv-text-small)",
-              color: "#374151",
-              lineHeight: 1.7,
-            }}
-          >
-            {overview.project_background}
+              color: "var(--cv-ink-muted)",
+            lineHeight: 1.7,
+          }}
+        >
+          {overview.project_background}
           </p>
         </div>
       </div>
@@ -276,7 +277,7 @@ function OverviewPanel({
       {/* What you'll learn */}
       <div
         className="rounded-[var(--cv-radius-card)] p-5"
-        style={{ background: "white", boxShadow: "var(--cv-shadow-card)" }}
+        style={{ background: "var(--cv-card-surface)", boxShadow: "var(--cv-shadow-card)" }}
       >
         <h2
           className="mb-4"
@@ -284,7 +285,7 @@ function OverviewPanel({
             fontFamily: "var(--cv-font-serif)",
             fontSize: "var(--cv-text-h3)",
             fontWeight: 500,
-            color: "#111827",
+            color: "var(--cv-ink)",
           }}
         >
           What you'll learn
@@ -292,12 +293,12 @@ function OverviewPanel({
         <ul className="flex flex-col gap-2.5">
           {what_youll_learn.map((item, i) => (
             <li key={i} className="flex items-start gap-3">
-              <CheckCircle2 size={16} strokeWidth={2} style={{ color: "#22C55E", marginTop: "2px", flexShrink: 0 }} aria-hidden />
+              <CheckCircle2 size={16} strokeWidth={2} style={{ color: "#4ADE80", marginTop: "2px", flexShrink: 0 }} aria-hidden />
               <span
                 style={{
                   fontFamily: "var(--cv-font-sans)",
                   fontSize: "var(--cv-text-small)",
-                  color: "#374151",
+                  color: "var(--cv-ink-muted)",
                   lineHeight: 1.6,
                 }}
               >
@@ -311,7 +312,7 @@ function OverviewPanel({
       {/* What you'll do */}
       <div
         className="rounded-[var(--cv-radius-card)] p-5"
-        style={{ background: "white", boxShadow: "var(--cv-shadow-card)" }}
+        style={{ background: "var(--cv-card-surface)", boxShadow: "var(--cv-shadow-card)" }}
       >
         <h2
           className="mb-4"
@@ -319,7 +320,7 @@ function OverviewPanel({
             fontFamily: "var(--cv-font-serif)",
             fontSize: "var(--cv-text-h3)",
             fontWeight: 500,
-            color: "#111827",
+            color: "var(--cv-ink)",
           }}
         >
           What you'll do
@@ -344,7 +345,7 @@ function OverviewPanel({
                 style={{
                   fontFamily: "var(--cv-font-sans)",
                   fontSize: "var(--cv-text-small)",
-                  color: "#374151",
+                  color: "var(--cv-ink-muted)",
                   lineHeight: 1.6,
                 }}
               >
@@ -403,7 +404,7 @@ function CongratulationsPanel({
         className="flex size-20 items-center justify-center rounded-full"
         style={{ background: "var(--cv-card-amber-icon)" }}
       >
-        <Trophy size={36} strokeWidth={1.6} color="#111827" aria-hidden />
+        <Trophy size={36} strokeWidth={1.6} color="var(--cv-accent)" aria-hidden />
       </motion.div>
 
       <motion.div
@@ -416,18 +417,18 @@ function CongratulationsPanel({
             fontFamily: "var(--cv-font-serif)",
             fontSize: "var(--cv-text-h1)",
             fontWeight: 400,
-            color: "#111827",
+            color: "var(--cv-ink)",
             lineHeight: 1.15,
           }}
         >
           Congratulations! 🎉
         </h1>
         <p
-          className="mx-auto mt-3 max-w-md text-gray-500"
-          style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-body)", lineHeight: 1.7 }}
+          className="mx-auto mt-3 max-w-md"
+          style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-body)", lineHeight: 1.7, color: "var(--cv-ink-muted)" }}
         >
           You have completed the{" "}
-          <strong style={{ color: "#111827" }}>{jobTitle}</strong>{" "}
+          <strong style={{ color: "var(--cv-ink)" }}>{jobTitle}</strong>{" "}
           Virtual Work Experience.
         </p>
       </motion.div>
@@ -437,11 +438,11 @@ function CongratulationsPanel({
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="flex w-full max-w-sm items-start gap-3 rounded-[var(--cv-radius-card)] p-4"
-          style={{ background: "#FEF2F2" }}
+          className="flex w-full max-w-sm items-start gap-3 rounded-[var(--cv-radius-card)] border p-4"
+          style={{ background: "rgba(239, 68, 68, 0.12)", borderColor: "rgba(239, 68, 68, 0.28)" }}
         >
-          <AlertCircle size={16} strokeWidth={2} color="#DC2626" className="mt-0.5 shrink-0" aria-hidden />
-          <p style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", color: "#991B1B" }}>
+          <AlertCircle size={16} strokeWidth={2} color="#F87171" className="mt-0.5 shrink-0" aria-hidden />
+          <p style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", color: "#FCA5A5" }}>
             {chooseError}
           </p>
         </motion.div>
@@ -502,7 +503,7 @@ function MissingSimulationState() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: EASE }}
-        className="w-full max-w-md rounded-[var(--cv-radius-main)] bg-white p-8 text-center"
+        className="w-full max-w-md rounded-[var(--cv-radius-main)] bg-[var(--cv-card-surface)] p-8 text-center"
         style={{ boxShadow: "var(--cv-shadow-main)" }}
       >
         <div
@@ -510,22 +511,22 @@ function MissingSimulationState() {
           style={{ background: "var(--cv-card-lavender-icon)" }}
           aria-hidden
         >
-          <Sparkles size={24} strokeWidth={1.6} color="#111827" />
+          <Sparkles size={24} strokeWidth={1.6} color="var(--cv-accent)" />
         </div>
         <h1
           style={{
             fontFamily: "var(--cv-font-serif)",
             fontSize: "var(--cv-text-h2)",
             fontWeight: 400,
-            color: "#111827",
+            color: "var(--cv-ink)",
             lineHeight: 1.2,
           }}
         >
           Experience not found
         </h1>
         <p
-          className="mt-3 text-gray-500"
-          style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", lineHeight: 1.6 }}
+          className="mt-3"
+          style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", lineHeight: 1.6, color: "var(--cv-ink-muted)" }}
         >
           Please navigate here via the Career Matches page. The simulation data
           is session-specific and cannot be accessed directly.
@@ -554,6 +555,7 @@ export function VirtualExperiencePage() {
   const location = useLocation()
   const navigate = useNavigate()
   const state = location.state as VirtualExperienceState | null
+  const { setCareerChosen } = useJourneyProgress()
 
   const simulationRecord = state?.simulation
   const tasks = simulationRecord?.simulation?.tasks ?? []
@@ -613,7 +615,12 @@ export function VirtualExperiencePage() {
     setChooseError(null)
     try {
       await chooseJobMatch(match.id)
-      navigate("/skill-gap", { state: { match, resumeId } })
+      setCareerChosen({ ...match, is_chosen: true })
+      if (state?.returnToDashboard) {
+        navigate("/dashboard#roadmap")
+      } else {
+        navigate("/skill-gap", { state: { match, resumeId } })
+      }
     } catch (error) {
       const message =
         error instanceof ApiError
@@ -690,7 +697,7 @@ export function VirtualExperiencePage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, ease: EASE }}
             >
-              <div className="my-2 h-px bg-gray-100" aria-hidden />
+              <div className="my-2 h-px bg-[var(--cv-border)]" aria-hidden />
               <FeedbackCard
                 feedback={task.feedback}
                 expectedSolution={task.expected_solution}
@@ -721,12 +728,12 @@ export function VirtualExperiencePage() {
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors duration-150 hover:bg-black/5"
+          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors duration-150 hover:bg-white/5"
           style={{
             fontFamily: "var(--cv-font-sans)",
             fontSize: "var(--cv-text-small)",
             fontWeight: 500,
-            color: "#6B7280",
+            color: "var(--cv-ink-muted)",
           }}
         >
           <ArrowLeft size={15} strokeWidth={2} aria-hidden />
@@ -755,7 +762,7 @@ export function VirtualExperiencePage() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, ease: EASE }}
-              className="mb-5 rounded-[var(--cv-radius-card)] bg-white p-4"
+              className="mb-5 rounded-[var(--cv-radius-card)] bg-[var(--cv-card-surface)] p-4"
               style={{ boxShadow: "var(--cv-shadow-card)" }}
             >
               <ProgressIndicator
@@ -767,7 +774,7 @@ export function VirtualExperiencePage() {
           )}
 
           <div
-            className="rounded-[var(--cv-radius-main)] bg-white p-6 md:p-8"
+            className="rounded-[var(--cv-radius-main)] bg-[var(--cv-card-surface)] p-6 md:p-8"
             style={{ boxShadow: "var(--cv-shadow-main)" }}
           >
             <AnimatePresence mode="wait">
@@ -795,7 +802,7 @@ export function VirtualExperiencePage() {
                       ? "var(--cv-card-sage-icon)"
                       : isActive
                         ? "var(--cv-accent)"
-                        : "#E5E7EB",
+                        : "var(--cv-surface-subtle)",
                     cursor: isLocked ? "default" : "pointer",
                   }}
                   aria-label={`Task ${i + 1}`}
@@ -805,7 +812,7 @@ export function VirtualExperiencePage() {
                       fontFamily: "var(--cv-font-sans)",
                       fontSize: "0.7rem",
                       fontWeight: 700,
-                      color: isDone ? "#166534" : isActive ? "#fff" : "#9CA3AF",
+                      color: isDone ? "var(--cv-accent)" : isActive ? "#fff" : "var(--cv-ink-muted)",
                     }}
                   >
                     {i + 1}

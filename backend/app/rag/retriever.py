@@ -24,7 +24,7 @@ Return format
 
 Exceptions
 ----------
-EmbeddingError  – raised when the OpenAI embedding call for the resume fails.
+EmbeddingError  – raised when the Gemini embedding call for the resume fails.
 ChromaDBError   – propagated from store.query() on database failure.
 """
 
@@ -67,7 +67,7 @@ def retrieve_relevant_job_descriptions(
 
     Raises
     ------
-    EmbeddingError  – when the OpenAI call fails.
+    EmbeddingError  – when the Gemini call fails.
     ChromaDBError   – when the ChromaDB query fails (not including empty collection).
     """
     if not resume_text or not resume_text.strip():
@@ -115,4 +115,4 @@ def retrieve_relevant_job_descriptions(
 
 
 class EmbeddingError(Exception):
-    """Raised when the OpenAI embedding call fails during retrieval."""
+    """Raised when the Gemini embedding call fails during retrieval."""
