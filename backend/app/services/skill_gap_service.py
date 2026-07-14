@@ -257,11 +257,11 @@ async def generate_skill_gap(
     JobDescriptionNotFoundError
         The chosen career's Job Description is missing or has no parsed text.
     skill_gap_agent.InvalidSkillGapResponseError
-        Gemini returned a response that could not be parsed or validated.
-    skill_gap_agent.GeminiRequestError
-        The Gemini API call failed.
+        The AI service returned a response that could not be parsed or validated.
+    skill_gap_agent.LLMRequestError
+        The AI service call failed.
     skill_gap_agent.SkillGapAgentTimeoutError
-        The Gemini API call timed out.
+        The AI service call timed out.
     """
     # Step 1: load the chosen career — fail fast if none is selected.
     chosen_match = _load_chosen_job_match(db, resume.id)

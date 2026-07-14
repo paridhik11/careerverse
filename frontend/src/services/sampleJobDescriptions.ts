@@ -18,7 +18,10 @@ export type SampleJobDescriptionListResponse = {
 
 export function getSampleJobDescriptions(): Promise<SampleJobDescription[]> {
   return apiFetch<SampleJobDescriptionListResponse>("/job-descriptions/samples").then(
-    (res) => res.samples,
+    (res) =>
+      [...res.samples].sort((a, b) =>
+        a.role_title.localeCompare(b.role_title, undefined, { sensitivity: "base" }),
+      ),
   )
 }
 

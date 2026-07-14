@@ -13,14 +13,15 @@ logic and does not change either of them.
 Hash-based caching
 ------------------
 If the same PDF was already reviewed (matched by `file_hash`), the cached
-`ResumeReviewReport` is returned immediately without calling Gemini.  This
-eliminates the latency cost for repeat uploads and makes scores fully
+`ResumeReviewReport` is returned immediately without calling the AI service.
+This eliminates the latency cost for repeat uploads and makes scores fully
 deterministic.
 """
 
 from __future__ import annotations
 
 import logging
+import traceback
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
@@ -82,12 +83,12 @@ async def review_resume(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ResumeReviewReport:
-    """Review a previously stored resume with Gemini and persist the report.
+    """Review a previously stored resume with the AI service and persist the report.
 
     Flow:
     1. Load the parsed resume by id.
     2. Check if a cached review already exists for this file hash (same PDF
-       → instant return, no Gemini call).
+       → instant return, no AI call).
     3. If not cached, call the Resume Reviewer Agent → persist the result.
 
     The response always matches `ResumeReviewReport` exactly (no envelope).
@@ -108,7 +109,7 @@ async def review_resume(
 
     # ── Hash-based cache check ──────────────────────────────────────────────
     # If this exact file was reviewed before (same hash), reuse the cached
-    # report — no Gemini call, no latency, deterministic scores.
+    # report — no AI call, no latency, deterministic scores.
     if resume.file_hash:
         cached_report = _get_cached_review_for_hash(db, resume.file_hash, current_user.id)
         if cached_report is not None:
@@ -123,28 +124,46 @@ async def review_resume(
     try:
         report = await resume_reviewer.review_resume(parsed_resume)
     except resume_reviewer.ResumeReviewTimeoutError as exc:
+        _log_review_failure(resume_id, exc)
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Resume review timed out. Please try again in a moment.",
+            detail=str(exc),
         ) from exc
-    except resume_reviewer.GeminiRequestError as exc:
+    except resume_reviewer.LLMRequestError as exc:
+        _log_review_failure(resume_id, exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="The AI service is temporarily unavailable. Please try again.",
+            detail=str(exc),
         ) from exc
     except resume_reviewer.InvalidReviewResponseError as exc:
-        logger.error("Invalid review response for resume_id=%s: %s", resume_id, exc)
+        _log_review_failure(resume_id, exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="We received an unexpected response from the AI. Please try again.",
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        _log_review_failure(resume_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"{type(exc).__name__}: {exc}",
         ) from exc
 
-    report_service.save_report(
-        db,
-        resume_id=resume.id,
-        report_type=RESUME_REVIEW_REPORT_TYPE,
-        content=report.model_dump(),
-    )
+    # Persist after a successful agent run. Keep this outside the AI try/except
+    # so DB failures are not mislabelled as OpenRouter/AI 502s — but still
+    # return a structured error instead of a bare FastAPI 500.
+    try:
+        report_service.save_report(
+            db,
+            resume_id=resume.id,
+            report_type=RESUME_REVIEW_REPORT_TYPE,
+            content=report.model_dump(),
+        )
+    except Exception as exc:
+        _log_review_failure(resume_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Review succeeded but could not be saved: {type(exc).__name__}: {exc}",
+        ) from exc
 
     return report
 
@@ -152,6 +171,33 @@ async def review_resume(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _log_review_failure(resume_id: int, exc: BaseException) -> None:
+    """Log the exact exception behind a 502/504 without ever masking it.
+
+    Logging itself must not raise (Windows console encoding can break on
+    some characters); the HTTP handler must still return the real detail.
+    """
+    cause = exc.__cause__
+    tb = traceback.extract_tb(exc.__traceback__)
+    frame = tb[-1] if tb else None
+    filename = frame.filename if frame else "?"
+    lineno = frame.lineno if frame else "?"
+    message = (
+        f"RESUME_REVIEW_FAILURE resume_id={resume_id} "
+        f"type={type(exc).__name__} msg={exc!s} "
+        f"cause_type={type(cause).__name__ if cause else None} "
+        f"cause={cause!s} file={filename} line={lineno}"
+    )
+    try:
+        print(message, flush=True)
+        traceback.print_exc()
+        logger.exception(message)
+    except Exception:
+        # Never let logging prevent the real HTTPException from being raised.
+        print(message, flush=True)
+        traceback.print_exc()
 
 
 def _get_cached_review_for_hash(

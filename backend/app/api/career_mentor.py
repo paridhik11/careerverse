@@ -146,10 +146,10 @@ async def _sse_generator(
         error_msg = "The mentor took too long to respond. Please try again."
         yield f"data: {json.dumps(error_msg)}\n\n"
         logger.warning("Mentor stream timeout for resume_id=%s: %s", resume_id, exc)
-    except career_mentor_agent.GeminiRequestError as exc:
+    except career_mentor_agent.LLMRequestError as exc:
         error_msg = "The mentor encountered an error. Please try again."
         yield f"data: {json.dumps(error_msg)}\n\n"
-        logger.error("Mentor stream Gemini error for resume_id=%s: %s", resume_id, exc)
+        logger.error("Mentor stream error for resume_id=%s: %s", resume_id, exc)
 
     yield "data: [DONE]\n\n"
 

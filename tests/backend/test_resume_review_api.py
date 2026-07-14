@@ -182,7 +182,7 @@ def test_review_resume_gemini_error_returns_502(client, tmp_path: Path, monkeypa
     resume_id = _create_resume(client, headers, tmp_path, monkeypatch)
 
     async def fake_review(_parsed_resume):
-        raise resume_reviewer.GeminiRequestError("boom")
+        raise resume_reviewer.LLMRequestError("boom")
 
     monkeypatch.setattr(resume_reviewer, "review_resume", fake_review)
 

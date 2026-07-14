@@ -124,7 +124,9 @@ export function CareerMentorSidebar() {
     ? (open: boolean) => (open ? mentorUi.openMentor() : mentorUi.closeMentor())
     : setLocalOpen
 
-  const hideFab = location.pathname === "/dashboard" || location.pathname === "/preview/dashboard"
+  // Keep FAB on every page including dashboard so Career Mentor is always one tap away.
+  // Hide only on the preview dashboard mock to avoid overlapping demo chrome.
+  const hideFab = location.pathname === "/preview/dashboard"
 
   const [messages, setMessages] = useState<MentorMessageRecord[]>([])
   const [streamingText, setStreamingText] = useState<string | null>(null)
@@ -218,7 +220,7 @@ export function CareerMentorSidebar() {
 
   return (
     <>
-      {/* Floating action button — hidden on Dashboard (navbar mentor ring opens the panel) */}
+      {/* Floating action button — visible on every page (including dashboard) */}
       {!hideFab && (
         <motion.button
           onClick={() => setIsOpen(true)}

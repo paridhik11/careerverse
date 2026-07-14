@@ -2,15 +2,13 @@
  * JobDescriptionUploadPage — continues the flow from ResumeReportPage.
  *
  * User flow:
- *   1. Arrive here from the Resume Report's "Upload Job Descriptions" CTA,
- *      carrying `resumeId` via location.state (see `JobDescriptionUploadState`).
- *   2. Select one or more PDF/TXT job descriptions (drag-and-drop or click-to-browse).
- *   3. Click "Find My Career Matches" → POST /job-descriptions/upload, then
- *      POST /job-matches/{resumeId}.
- *   4. Display the Top 3 career matches returned by the Career Recommendation
- *      Agent as simple, on-brand result cards.
+ *   1. Arrive here from the Resume Report CTA with resumeId (+ optional report).
+ *   2. Select one or more PDF/TXT job descriptions.
+ *   3. Click "Analyze Resume" → upload JDs, seed sample catalog for
+ *      related careers, POST /job-matches/{resumeId}.
+ *   4. Navigate to Resume Analysis, then Career Explorer.
  *
- * State machine mirrors UploadResumePage: idle → uploading → matching → done | error.
+ * State machine: idle → uploading → matching → done | error.
  */
 
 import { useCallback, useRef, useState, type ChangeEvent, type DragEvent } from "react"
@@ -30,8 +28,10 @@ import { FormErrorBanner } from "@/components/FormErrorBanner"
 import { Button } from "@/components/ui/button"
 import { uploadJobDescriptions } from "@/services/jobDescriptions"
 import { generateJobMatches } from "@/services/jobMatches"
+import { getSampleJobDescriptions, seedSampleJobDescriptions } from "@/services/sampleJobDescriptions"
 import { ApiError } from "@/services/api"
-import type { JobDescriptionUploadState, JobMatch } from "@/types"
+import type { JobDescriptionUploadState } from "@/types"
+import { pickPrimaryMatch } from "@/utils/resumeMatch"
 
 /* ─── Constants ─────────────────────────────────────────────────────────── */
 
@@ -44,7 +44,7 @@ type Phase = "idle" | "uploading" | "matching" | "done" | "error"
 
 const STEPS: Array<{ phase: Phase; label: string; description: string }> = [
   { phase: "uploading", label: "Uploading Job Descriptions", description: "Extracting text and indexing for retrieval…" },
-  { phase: "matching", label: "Finding Your Matches", description: "GPT-4o is comparing your resume against real job postings…" },
+  { phase: "matching", label: "Scoring Resume Analysis", description: "Comparing your resume against the selected job description…" },
 ]
 
 const ACTIVE_STEP_INDEX: Record<Phase, number> = {
@@ -53,12 +53,6 @@ const ACTIVE_STEP_INDEX: Record<Phase, number> = {
   matching: 1,
   done: -1,
   error: -1,
-}
-
-const CONFIDENCE_STYLES: Record<JobMatch["confidence_score"], { bg: string; text: string }> = {
-  High: { bg: "rgba(34, 197, 94, 0.16)", text: "#4ADE80" },
-  Medium: { bg: "rgba(251, 191, 36, 0.16)", text: "#FBBF24" },
-  Low: { bg: "var(--cv-surface-subtle)", text: "var(--cv-ink-muted)" },
 }
 
 /* ─── Helpers ───────────────────────────────────────────────────────────── */
@@ -180,131 +174,6 @@ function ProcessingPanel({ phase }: { phase: Phase }) {
   )
 }
 
-/** One Top-3 career match result card. */
-function JobMatchCard({ match }: { match: JobMatch }) {
-  const confidence = CONFIDENCE_STYLES[match.confidence_score]
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: (match.rank - 1) * 0.07, ease: EASE }}
-      className="rounded-[var(--cv-radius-card)] p-5"
-      style={{ background: "var(--cv-card-surface)", boxShadow: "var(--cv-shadow-card)" }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span
-            className="flex size-9 shrink-0 items-center justify-center rounded-full"
-            style={{
-              background: "var(--cv-accent-soft)",
-              fontFamily: "var(--cv-font-serif)",
-              fontSize: "var(--cv-text-h3)",
-              fontWeight: 500,
-              color: "var(--cv-accent)",
-            }}
-            aria-hidden
-          >
-            {match.rank}
-          </span>
-          <div>
-            <h3
-              style={{
-                fontFamily: "var(--cv-font-serif)",
-                fontSize: "var(--cv-text-h3)",
-                fontWeight: 500,
-                color: "var(--cv-ink)",
-                lineHeight: 1.25,
-              }}
-            >
-              {match.role_title}
-            </h3>
-            <span
-              className="mt-0.5 inline-flex rounded-full px-2.5 py-0.5"
-              style={{
-                background: confidence.bg,
-                color: confidence.text,
-                fontFamily: "var(--cv-font-sans)",
-                fontSize: "var(--cv-text-caption)",
-                fontWeight: 600,
-              }}
-            >
-              {match.confidence_score} confidence
-            </span>
-          </div>
-        </div>
-
-        <div className="shrink-0 text-right">
-          <span
-            style={{
-              fontFamily: "var(--cv-font-serif)",
-              fontSize: "var(--cv-text-h2)",
-              fontWeight: 400,
-              color: "var(--cv-accent)",
-            }}
-          >
-            {match.match_percent}%
-          </span>
-          <p
-            style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-caption)", color: "var(--cv-ink-muted)" }}
-          >
-            match
-          </p>
-        </div>
-      </div>
-
-      <p
-        className="mt-4"
-        style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", lineHeight: 1.6, color: "var(--cv-ink-muted)" }}
-      >
-        {match.career_overview}
-      </p>
-
-      <p
-        className="mt-3"
-        style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", lineHeight: 1.6, color: "var(--cv-ink-muted)" }}
-      >
-        {match.reasoning}
-      </p>
-
-      {match.missing_skills.length > 0 && (
-        <div className="mt-4">
-          <p
-            className="mb-2"
-            style={{
-              fontFamily: "var(--cv-font-sans)",
-              fontSize: "var(--cv-text-caption)",
-              fontWeight: 600,
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              color: "var(--cv-ink-muted)",
-            }}
-          >
-            Missing skills for this role
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {match.missing_skills.map((skill, i) => (
-              <span
-                key={i}
-                className="rounded-full px-3 py-1"
-                style={{
-                  background: "var(--cv-surface-subtle)",
-                  color: "var(--cv-ink)",
-                  fontFamily: "var(--cv-font-sans)",
-                  fontSize: "var(--cv-text-caption)",
-                  fontWeight: 500,
-                }}
-              >
-                {skill}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-    </motion.div>
-  )
-}
-
 /* ─── Missing-state (no resumeId in location.state) ─────────────────────── */
 
 function MissingResumeState() {
@@ -343,7 +212,7 @@ function MissingResumeState() {
           className="mt-3"
           style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", lineHeight: 1.6, color: "var(--cv-ink-muted)" }}
         >
-          Career matches are compared against a specific resume. Please
+          Career Explorer compares roles against a specific resume. Please
           analyze your resume first, then continue to job descriptions from
           your report.
         </p>
@@ -373,13 +242,14 @@ export function JobDescriptionUploadPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [phase, setPhase] = useState<Phase>("idle")
   const [errorPhase, setErrorPhase] = useState<Phase>("idle")
-  const [matches, setMatches] = useState<JobMatch[]>([])
 
   if (!state?.resumeId) {
     return <MissingResumeState />
   }
 
   const resumeId = state.resumeId
+  const reviewReport = state.report
+  const fileName = state.fileName
 
   /* ── File selection ─────────────────────────────────────────────────── */
 
@@ -448,15 +318,42 @@ export function JobDescriptionUploadPage() {
 
     try {
       setPhase("uploading")
-      await uploadJobDescriptions(selectedFiles)
+      const uploaded = await uploadJobDescriptions(selectedFiles)
+      const preferredJobDescriptionIds = uploaded.uploaded
+        .map((item) => Number(item.id))
+        .filter((id) => Number.isFinite(id))
+      const selectedJdTitle =
+        uploaded.uploaded[0]?.role_title?.trim() ||
+        selectedFiles[0]?.name.replace(/\.(pdf|txt)$/i, "") ||
+        "Selected role"
+
+      // Seed sample catalog so career Top 3 can rank across a broader corpus.
+      try {
+        const samples = await getSampleJobDescriptions()
+        if (samples.length > 0) {
+          await seedSampleJobDescriptions(samples.map((s) => s.id))
+        }
+      } catch {
+        // Own JD alone is enough for the primary match report.
+      }
 
       setPhase("matching")
       const response = await generateJobMatches(resumeId)
+      const primaryMatch = pickPrimaryMatch(response.matches, {
+        preferredJobDescriptionIds,
+        preferredRoleTitle: selectedJdTitle,
+      })
 
-      setMatches(response.matches)
       setPhase("done")
-      navigate(`/career-matches/${resumeId}`, {
-        state: { matches: response.matches, resumeId },
+      navigate(`/resume-match/${resumeId}`, {
+        state: {
+          matches: response.matches,
+          resumeId,
+          selectedJdTitle,
+          primaryMatch,
+          report: reviewReport,
+          fileName,
+        },
       })
     } catch (error) {
       const message =
@@ -477,62 +374,6 @@ export function JobDescriptionUploadPage() {
   }
 
   const isProcessing = phase === "uploading" || phase === "matching"
-
-  /* ── Render: results view ──────────────────────────────────────────── */
-
-  if (phase === "done" && matches.length > 0) {
-    const sortedMatches = [...matches].sort((a, b) => a.rank - b.rank)
-
-    return (
-      <div className="min-h-screen w-full px-4 py-8 md:px-6" style={{ background: "var(--cv-bg)" }}>
-        <motion.div
-          className="mx-auto max-w-3xl space-y-5"
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: EASE }}
-        >
-          <div className="text-center">
-            <div
-              className="mx-auto mb-4 flex size-11 items-center justify-center rounded-full"
-              style={{ background: "var(--cv-accent-soft)" }}
-              aria-hidden
-            >
-              <Sparkles size={20} strokeWidth={1.8} color="var(--cv-accent)" />
-            </div>
-            <h1
-              style={{
-                fontFamily: "var(--cv-font-serif)",
-                fontSize: "var(--cv-text-h1)",
-                fontWeight: 400,
-                color: "var(--cv-ink)",
-                lineHeight: 1.2,
-              }}
-            >
-              Your Top 3 career matches
-            </h1>
-            <p
-              className="mx-auto mt-2 max-w-md"
-              style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", lineHeight: 1.6, color: "var(--cv-ink-muted)" }}
-            >
-              Ranked by how closely your resume matches each uploaded job description.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-4">
-            {sortedMatches.map((match) => (
-              <JobMatchCard key={match.id} match={match} />
-            ))}
-          </div>
-
-          <div className="pt-2 text-center">
-            <Button type="button" variant="outline" onClick={() => navigate("/resume/upload")}>
-              Analyze another resume
-            </Button>
-          </div>
-        </motion.div>
-      </div>
-    )
-  }
 
   /* ── Render: upload / processing / error view ────────────────────────── */
 
@@ -561,7 +402,7 @@ export function JobDescriptionUploadPage() {
           <h1
             style={{ fontFamily: "var(--cv-font-serif)", fontSize: "var(--cv-text-h2)", fontWeight: 400, lineHeight: 1.2, color: "var(--cv-ink)" }}
           >
-            {isProcessing ? "Finding your career matches" : "Upload job descriptions"}
+            {isProcessing ? "Analyzing your resume match" : "Upload job descriptions"}
           </h1>
           <p className="mt-2" style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", color: "var(--cv-ink-muted)" }}>
             {isProcessing
@@ -725,7 +566,7 @@ export function JobDescriptionUploadPage() {
                 style={{ background: "var(--cv-accent)" }}
               >
                 <Sparkles size={16} strokeWidth={2} aria-hidden />
-                Find My Career Matches
+                Analyze Resume
               </Button>
             </motion.div>
           )}

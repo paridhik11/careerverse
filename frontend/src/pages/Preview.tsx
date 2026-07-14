@@ -67,7 +67,7 @@ const PREVIEW_LINKS: PreviewLink[] = [
     needsMockState: true,
   },
   {
-    title: "Career Matches",
+    title: "Career Explorer",
     description: "Top-3 matches UI with mock JobMatch list.",
     to: "/preview/career-matches",
     colorVariant: "sage",

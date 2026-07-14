@@ -227,11 +227,11 @@ async def generate_roadmap(
     SkillGapNotFoundError
         No Skill Gap Analysis has been run for the chosen career.
     learning_plan_agent.InvalidLearningPlanResponseError
-        Gemini returned a response that could not be parsed or validated.
-    learning_plan_agent.GeminiRequestError
-        The Gemini API call failed.
+        The AI service returned a response that could not be parsed or validated.
+    learning_plan_agent.LLMRequestError
+        The AI service call failed.
     learning_plan_agent.LearningPlanAgentTimeoutError
-        The Gemini API call timed out.
+        The AI service call timed out.
     """
     # Step 1: load the chosen career — fail fast if none is selected.
     chosen_match = _load_chosen_job_match(db, resume.id)

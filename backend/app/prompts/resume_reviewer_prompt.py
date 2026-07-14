@@ -20,6 +20,14 @@ from __future__ import annotations
 from app.models.resume import ParsedResume
 from app.services.ats_scorer import ATSScoreBreakdown
 
+_FULL_TEXT_MAX_CHARS = 5_000
+
+
+def _truncate(text: str, max_chars: int, label: str = "text") -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars] + f"\n\n[...{label} truncated to fit context window...]"
+
 RESUME_REVIEWER_SYSTEM_PROMPT = """\
 You are an experienced technical recruiter, ATS (Applicant Tracking System) \
 evaluator, and career advisor. You review resumes the way a senior hiring \
@@ -129,7 +137,7 @@ PROJECTS SECTION:
 FULL RESUME TEXT (use this for anything not captured by the sections above, \
 e.g. summary/objective, certifications, formatting cues):
 \"\"\"
-{parsed_resume.full_text}
+{_truncate(parsed_resume.full_text or '', _FULL_TEXT_MAX_CHARS, 'resume full text')}
 \"\"\"
 
 Return ONLY the JSON object described in the system prompt. The overall_score \

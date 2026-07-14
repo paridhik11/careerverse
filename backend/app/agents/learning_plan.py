@@ -1,11 +1,11 @@
 """AI Learning Roadmap Agent.
 
 Generates a personalised 3-Month Learning Roadmap for the user's chosen career
-by calling Gemini with the selected Job Description, Skill Gap Analysis, and
+by calling OpenRouter with the selected Job Description, Skill Gap Analysis, and
 resume text.
 
-Per `.cursorrules`, this is the only module that calls Gemini for roadmap
-generation. Routes and services stay thin and never touch the Gemini SDK
+Per `.cursorrules`, this is the only module that calls the LLM for roadmap
+generation. Routes and services stay thin and never touch the AI client
 directly.
 
 The roadmap is grounded exclusively in:
@@ -18,7 +18,7 @@ run against the other two recommendations.
 
 Responsibilities:
     - Accept resume text, JD text, role title, and skill gap summary.
-    - Call Gemini with the Learning Plan prompt (system + user).
+    - Call the LLM with the Learning Plan prompt (system + user).
     - Extract and validate the JSON response into `RoadmapContent`.
     - Return the validated `RoadmapContent` — never raw text.
     - Raise descriptive, typed exceptions on every failure path so the
@@ -32,21 +32,23 @@ import json
 import logging
 import re
 
-import httpx
-from google import genai
-from google.genai import errors, types
 from pydantic import ValidationError
 
-from app.core.config import settings
 from app.models.learning_roadmap import RoadmapContent
 from app.prompts.learning_plan import (
     LEARNING_PLAN_SYSTEM_PROMPT,
     build_learning_plan_user_prompt,
 )
+from app.services import openrouter_client
+from app.services.openrouter_client import (
+    OpenRouterAuthError,
+    OpenRouterError,
+    OpenRouterRateLimitError,
+    OpenRouterServerError,
+    OpenRouterTimeoutError,
+)
 
 logger = logging.getLogger(__name__)
-
-MODEL_NAME = "gemini-2.5-flash"
 
 # Roadmap generation is analytical but benefits from slight creative variety
 # in resource and project suggestions — 0.4 balances precision with diversity.
@@ -68,16 +70,16 @@ class LearningPlanAgentError(Exception):
     """Base class for every Learning Roadmap Agent failure."""
 
 
-class GeminiRequestError(LearningPlanAgentError):
-    """The Gemini API call itself failed (connection, auth, rate limit, server error)."""
+class LLMRequestError(LearningPlanAgentError):
+    """The LLM API call itself failed (connection, auth, rate limit, server error)."""
 
 
 class LearningPlanAgentTimeoutError(LearningPlanAgentError):
-    """The Gemini API call did not complete within `REQUEST_TIMEOUT_SECONDS`."""
+    """The LLM API call did not complete within `REQUEST_TIMEOUT_SECONDS`."""
 
 
 class InvalidLearningPlanResponseError(LearningPlanAgentError):
-    """Gemini's response could not be parsed or validated into `RoadmapContent`."""
+    """The LLM response could not be parsed or validated into `RoadmapContent`."""
 
 
 # ---------------------------------------------------------------------------
@@ -85,26 +87,8 @@ class InvalidLearningPlanResponseError(LearningPlanAgentError):
 # ---------------------------------------------------------------------------
 
 
-def _get_client() -> genai.Client:
-    """Build a Gemini client from settings.
-
-    Constructed at call time (not module level) so tests can monkeypatch
-    `settings.gemini_api_key` without reloading the module.
-    """
-    return genai.Client(
-        api_key=settings.gemini_api_key,
-        http_options=types.HttpOptions(timeout=int(REQUEST_TIMEOUT_SECONDS * 1000)),
-    )
-
-
 def _extract_json_object(raw_text: str) -> str:
-    """Best-effort extraction of a bare JSON object from the model's raw text.
-
-    `response_mime_type="application/json"` should guarantee bare JSON,
-    but this guard handles the rare case where the model wraps its output in
-    a markdown code fence or adds stray commentary — matching the pattern
-    used in `app.agents.skill_gap` and `app.agents.career_advisor`.
-    """
+    """Best-effort extraction of a bare JSON object from the model's raw text."""
     stripped = raw_text.strip()
 
     fenced = _JSON_FENCE_RE.search(stripped)
@@ -119,13 +103,50 @@ def _extract_json_object(raw_text: str) -> str:
     return stripped
 
 
+def _normalize_string_list(value: object, *, min_items: int, pad: str) -> list[str]:
+    if isinstance(value, str):
+        items = [part.strip() for part in value.split("\n") if part.strip()]
+    elif isinstance(value, list):
+        items = [str(item).strip() for item in value if str(item).strip()]
+    else:
+        items = []
+    while len(items) < min_items:
+        items.append(pad)
+    return items
+
+
+def _normalize_month(raw: object, label: str) -> dict:
+    if not isinstance(raw, dict):
+        raw = {}
+    focus = str(raw.get("focus") or "").strip() or f"{label}: build role-relevant skills."
+    return {
+        "focus": focus,
+        "topics": _normalize_string_list(
+            raw.get("topics"), min_items=1, pad=f"{label} core topic from the skill gap"
+        ),
+        "projects": _normalize_string_list(
+            raw.get("projects"), min_items=1, pad=f"{label} practice project tied to the JD"
+        ),
+        "resources": _normalize_string_list(
+            raw.get("resources"),
+            min_items=1,
+            pad="Official documentation / free course relevant to the role",
+        ),
+        "milestones": _normalize_string_list(
+            raw.get("milestones"),
+            min_items=1,
+            pad=f"Complete the {label} project and document outcomes",
+        ),
+    }
+
+
 def _parse_and_validate(raw_text: str) -> RoadmapContent:
-    """Parse Gemini's raw text into a validated `RoadmapContent`.
+    """Parse the LLM's raw text into a validated `RoadmapContent`.
 
     Parameters
     ----------
     raw_text:
-        The raw string returned by `response.text`.
+        The raw string returned by the LLM.
 
     Returns
     -------
@@ -152,6 +173,10 @@ def _parse_and_validate(raw_text: str) -> RoadmapContent:
             f"got {type(payload).__name__}."
         )
 
+    payload["month_1"] = _normalize_month(payload.get("month_1"), "Month 1")
+    payload["month_2"] = _normalize_month(payload.get("month_2"), "Month 2")
+    payload["month_3"] = _normalize_month(payload.get("month_3"), "Month 3")
+
     try:
         return RoadmapContent.model_validate(payload)
     except ValidationError as exc:
@@ -174,7 +199,7 @@ async def generate_learning_plan(
     """Run the Learning Roadmap Agent for the user's chosen career.
 
     Sends the resume, Job Description, role title, and Skill Gap Analysis
-    to Gemini and returns a fully validated `RoadmapContent` with all three
+    to the LLM and returns a fully validated `RoadmapContent` with all three
     months of the personalised learning plan.
 
     The JD is the primary source of truth for role requirements. The Skill Gap
@@ -203,13 +228,13 @@ async def generate_learning_plan(
     Raises
     ------
     InvalidLearningPlanResponseError
-        If required inputs are empty, or if Gemini's response cannot be
+        If required inputs are empty, or if the LLM response cannot be
         parsed or validated.
-    GeminiRequestError
-        The Gemini API call failed (network, authentication, rate limit,
+    LLMRequestError
+        The LLM API call failed (network, authentication, rate limit,
         or server error).
     LearningPlanAgentTimeoutError
-        The Gemini API call did not complete within `REQUEST_TIMEOUT_SECONDS`.
+        The LLM API call did not complete within `REQUEST_TIMEOUT_SECONDS`.
     """
     if not jd_text or not jd_text.strip():
         raise InvalidLearningPlanResponseError(
@@ -229,39 +254,43 @@ async def generate_learning_plan(
             f"the skill gap summary is empty."
         )
 
-    client = _get_client()
     user_prompt = build_learning_plan_user_prompt(
         resume_text=resume_text,
         jd_text=jd_text,
         role_title=role_title,
         skill_gap_summary=skill_gap_summary,
     )
+    messages = [
+        {"role": "system", "content": LEARNING_PLAN_SYSTEM_PROMPT},
+        {"role": "user", "content": user_prompt},
+    ]
 
     logger.info(
         "Learning Roadmap Agent starting generation for role: '%s'.", role_title
     )
 
     try:
-        response = await client.aio.models.generate_content(
-            model=MODEL_NAME,
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=LEARNING_PLAN_SYSTEM_PROMPT,
-                temperature=TEMPERATURE,
-                response_mime_type="application/json",
-            ),
+        raw_text = await openrouter_client.chat_completion(
+            messages=messages,
+            temperature=TEMPERATURE,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            max_tokens=3072,
         )
-    except httpx.TimeoutException as exc:
+    except OpenRouterTimeoutError as exc:
         raise LearningPlanAgentTimeoutError(
             f"Learning Roadmap Agent timed out generating plan for role '{role_title}'."
         ) from exc
-    except errors.APIError as exc:
-        raise GeminiRequestError(
-            f"Gemini request failed during roadmap generation for role "
+    except (OpenRouterAuthError, OpenRouterRateLimitError, OpenRouterServerError, OpenRouterError) as exc:
+        logger.error(
+            "Learning Roadmap Agent LLM request failed for role '%s': %s",
+            role_title,
+            exc,
+        )
+        raise LLMRequestError(
+            f"AI service request failed during roadmap generation for role "
             f"'{role_title}': {exc}"
         ) from exc
 
-    raw_text = response.text
     if not raw_text:
         raise InvalidLearningPlanResponseError(
             f"Learning Roadmap Agent returned an empty response for role '{role_title}'."

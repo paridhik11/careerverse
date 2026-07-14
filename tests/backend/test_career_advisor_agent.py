@@ -1,16 +1,14 @@
-"""Unit tests for the Career Recommendation Agent (Gemini is always mocked)."""
+"""Unit tests for the Career Recommendation Agent (OpenRouter is always mocked)."""
 
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import httpx
 import pytest
-from google.genai import errors
 
 from app.agents import career_advisor
+from app.services.openrouter_client import OpenRouterServerError, OpenRouterTimeoutError
 
 RETRIEVED_JDS = [
     {
@@ -68,23 +66,17 @@ VALID_MATCHES_JSON = {
 SAMPLE_RESUME_TEXT = "Jane Doe\nSkills: Python, FastAPI, PostgreSQL\nExperience: Backend intern."
 
 
-def _fake_response(content: str) -> SimpleNamespace:
-    return SimpleNamespace(text=content)
-
-
-def _install_fake_client(monkeypatch: pytest.MonkeyPatch, generate_mock: AsyncMock) -> None:
-    fake_client = SimpleNamespace(
-        aio=SimpleNamespace(models=SimpleNamespace(generate_content=generate_mock))
-    )
-    monkeypatch.setattr(career_advisor, "_get_client", lambda: fake_client)
+def _mock_chat_completion(monkeypatch: pytest.MonkeyPatch, return_value: str) -> AsyncMock:
+    mock = AsyncMock(return_value=return_value)
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
+    return mock
 
 
 @pytest.mark.asyncio
 async def test_generate_career_matches_returns_three_ranked_matches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(VALID_MATCHES_JSON)))
-    _install_fake_client(monkeypatch, generate_mock)
+    mock = _mock_chat_completion(monkeypatch, json.dumps(VALID_MATCHES_JSON))
 
     matches = await career_advisor.generate_career_matches(SAMPLE_RESUME_TEXT, RETRIEVED_JDS)
 
@@ -92,12 +84,12 @@ async def test_generate_career_matches_returns_three_ranked_matches(
     assert [m.rank for m in matches] == [1, 2, 3]
     assert {m.job_description_id for m in matches} == {"1", "2", "3"}
     assert all(0 <= m.match_percent <= 100 for m in matches)
-    generate_mock.assert_awaited_once()
-    call_kwargs = generate_mock.await_args.kwargs
-    assert call_kwargs["model"] == "gemini-2.5-flash"
-    assert isinstance(call_kwargs["contents"], str)
-    assert call_kwargs["config"].temperature == 0.3
-    assert call_kwargs["config"].response_mime_type == "application/json"
+    mock.assert_awaited_once()
+    call_kwargs = mock.await_args.kwargs
+    messages = call_kwargs["messages"]
+    assert messages[0]["role"] == "system"
+    assert messages[1]["role"] == "user"
+    assert call_kwargs["temperature"] == 0.3
 
 
 @pytest.mark.asyncio
@@ -105,8 +97,7 @@ async def test_generate_career_matches_extracts_json_from_code_fence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fenced = f"```json\n{json.dumps(VALID_MATCHES_JSON)}\n```"
-    generate_mock = AsyncMock(return_value=_fake_response(fenced))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, fenced)
 
     matches = await career_advisor.generate_career_matches(SAMPLE_RESUME_TEXT, RETRIEVED_JDS)
 
@@ -125,8 +116,7 @@ async def test_generate_career_matches_raises_when_no_jds_retrieved(
 async def test_generate_career_matches_raises_on_malformed_json(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    generate_mock = AsyncMock(return_value=_fake_response("not json at all"))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, "not json at all")
 
     with pytest.raises(career_advisor.InvalidCareerAdvisorResponseError):
         await career_advisor.generate_career_matches(SAMPLE_RESUME_TEXT, RETRIEVED_JDS)
@@ -137,8 +127,7 @@ async def test_generate_career_matches_raises_on_fewer_than_three_matches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bad_payload = {"matches": VALID_MATCHES_JSON["matches"][:2]}
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(career_advisor.InvalidCareerAdvisorResponseError):
         await career_advisor.generate_career_matches(SAMPLE_RESUME_TEXT, RETRIEVED_JDS)
@@ -150,8 +139,7 @@ async def test_generate_career_matches_raises_on_duplicate_ranks(
 ) -> None:
     bad_payload = json.loads(json.dumps(VALID_MATCHES_JSON))
     bad_payload["matches"][1]["rank"] = 1  # duplicate rank
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(career_advisor.InvalidCareerAdvisorResponseError):
         await career_advisor.generate_career_matches(SAMPLE_RESUME_TEXT, RETRIEVED_JDS)
@@ -163,8 +151,7 @@ async def test_generate_career_matches_raises_on_duplicate_job_description_id(
 ) -> None:
     bad_payload = json.loads(json.dumps(VALID_MATCHES_JSON))
     bad_payload["matches"][1]["job_description_id"] = "1"  # duplicate JD
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(career_advisor.InvalidCareerAdvisorResponseError):
         await career_advisor.generate_career_matches(SAMPLE_RESUME_TEXT, RETRIEVED_JDS)
@@ -177,8 +164,7 @@ async def test_generate_career_matches_raises_when_jd_not_retrieved(
     """A model hallucinating a job_description_id outside the retrieved set must be rejected."""
     bad_payload = json.loads(json.dumps(VALID_MATCHES_JSON))
     bad_payload["matches"][0]["job_description_id"] = "999"  # never retrieved
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(career_advisor.InvalidCareerAdvisorResponseError):
         await career_advisor.generate_career_matches(SAMPLE_RESUME_TEXT, RETRIEVED_JDS)
@@ -190,8 +176,7 @@ async def test_generate_career_matches_raises_on_out_of_range_match_percent(
 ) -> None:
     bad_payload = json.loads(json.dumps(VALID_MATCHES_JSON))
     bad_payload["matches"][0]["match_percent"] = 150
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(career_advisor.InvalidCareerAdvisorResponseError):
         await career_advisor.generate_career_matches(SAMPLE_RESUME_TEXT, RETRIEVED_JDS)
@@ -201,19 +186,19 @@ async def test_generate_career_matches_raises_on_out_of_range_match_percent(
 async def test_generate_career_matches_raises_timeout_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    generate_mock = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
-    _install_fake_client(monkeypatch, generate_mock)
+    mock = AsyncMock(side_effect=OpenRouterTimeoutError("timeout"))
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
     with pytest.raises(career_advisor.CareerAdvisorTimeoutError):
         await career_advisor.generate_career_matches(SAMPLE_RESUME_TEXT, RETRIEVED_JDS)
 
 
 @pytest.mark.asyncio
-async def test_generate_career_matches_raises_gemini_request_error(
+async def test_generate_career_matches_raises_llm_request_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    generate_mock = AsyncMock(side_effect=errors.APIError(500, {"error": {"message": "boom"}}))
-    _install_fake_client(monkeypatch, generate_mock)
+    mock = AsyncMock(side_effect=OpenRouterServerError("server error"))
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
-    with pytest.raises(career_advisor.GeminiRequestError):
+    with pytest.raises(career_advisor.LLMRequestError):
         await career_advisor.generate_career_matches(SAMPLE_RESUME_TEXT, RETRIEVED_JDS)

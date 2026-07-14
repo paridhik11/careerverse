@@ -32,7 +32,9 @@ google-auth>=2.35.0,<3.0.0
 # signing keys during verification.
 requests>=2.32.0,<3.0.0
 
-# AI & embeddings (Google Gemini via the google-genai SDK)
+# AI — Google Gemini SDK (used exclusively by the RAG embedding pipeline:
+# app.rag.embeddings uses gemini-embedding-001 for ChromaDB vector storage.
+# LLM agent calls have been migrated to OpenRouter — this is embeddings only.)
 google-genai>=1.0.0,<3.0.0
 
 # Vector database (RAG)

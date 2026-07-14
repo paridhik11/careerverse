@@ -22,6 +22,7 @@ import { LandingPage } from "@/pages/LandingPage"
 import { LearningRoadmapPage } from "@/pages/LearningRoadmap"
 import { LoginPage } from "@/pages/Login"
 import { PreviewPage } from "@/pages/Preview"
+import { ResumeMatchPage } from "@/pages/ResumeMatch"
 import { ResumeReportPage } from "@/pages/ResumeReport"
 import { SkillGapPage } from "@/pages/SkillGap"
 import { UploadResumePage } from "@/pages/UploadResume"
@@ -82,6 +83,14 @@ export function App() {
                 element={
                   <PrivateRoute>
                     <JobDescriptionUploadPage />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/resume-match/:resumeId"
+                element={
+                  <PrivateRoute>
+                    <ResumeMatchPage />
                   </PrivateRoute>
                 }
               />

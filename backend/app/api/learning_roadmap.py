@@ -110,7 +110,7 @@ async def create_learning_roadmap(
             detail=str(exc),
         ) from exc
     except (
-        learning_plan_agent.GeminiRequestError,
+        learning_plan_agent.LLMRequestError,
         learning_plan_agent.InvalidLearningPlanResponseError,
     ) as exc:
         raise HTTPException(

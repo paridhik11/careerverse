@@ -42,6 +42,16 @@ Design decisions
 
 from __future__ import annotations
 
+_JD_MAX_CHARS = 6_000
+_RESUME_MAX_CHARS = 4_000
+
+
+def _truncate(text: str, max_chars: int, label: str = "text") -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars] + f"\n\n[...{label} truncated to fit context window...]"
+
+
 LEARNING_PLAN_SYSTEM_PROMPT = """\
 You are an Experienced Career Coach with 15+ years of helping students and \
 junior professionals transition into competitive roles at technology companies, \
@@ -169,6 +179,9 @@ def build_learning_plan_user_prompt(
         missing technical skills, missing soft skills, readiness score, and
         recommended next steps). This drives the month-by-month plan.
     """
+    safe_jd = _truncate(jd_text.strip(), _JD_MAX_CHARS, "JD")
+    safe_resume = _truncate(resume_text.strip(), _RESUME_MAX_CHARS, "resume")
+
     lines: list[str] = [
         f"Generate a personalised 3-Month Learning Roadmap for the candidate "
         f"targeting the role below.",
@@ -177,7 +190,7 @@ def build_learning_plan_user_prompt(
         f"",
         f"FULL JOB DESCRIPTION TEXT (primary source of truth for role requirements):",
         '"""',
-        jd_text.strip(),
+        safe_jd,
         '"""',
         f"",
         f"SKILL GAP ANALYSIS (drives the month-by-month progression):",
@@ -187,7 +200,7 @@ def build_learning_plan_user_prompt(
         f"",
         f"CANDIDATE RESUME TEXT (context on existing competencies):",
         '"""',
-        resume_text.strip(),
+        safe_resume,
         '"""',
         f"",
         f"Use the Skill Gap Analysis as the primary driver: every topic and "

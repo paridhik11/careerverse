@@ -13,7 +13,17 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # OpenRouter — required for all AI agent (LLM) features. Read from .env only.
+    openrouter_api_key: str = "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"
+    openrouter_model: str = "meta-llama/llama-3.1-8b-instruct"
+    openrouter_referer: str = "http://localhost:5173"
+    openrouter_app_name: str = "CareerVerse AI"
+
+    # Gemini — used exclusively by the RAG embedding pipeline (app.rag.embeddings).
+    # LLM agent calls have been migrated to OpenRouter; this key remains only for
+    # the gemini-embedding-001 text embedding model used by ChromaDB RAG.
     gemini_api_key: str = "AQ.Ab8RN6IuQopD0IlEc_FOJ14OZwfYhvpb8yiyZ7pY_ppdaVi8vA"
+
     # Empty string → SQLite fallback in app.core.database (local MVP without Postgres).
     database_url: str = ""
     supabase_url: str = ""
@@ -37,7 +47,11 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
-    @field_validator("database_url", "jwt_secret", "gemini_api_key", mode="before")
+    @field_validator(
+        "database_url", "jwt_secret", "openrouter_api_key", "gemini_api_key",
+        "openrouter_model", "openrouter_referer", "openrouter_app_name",
+        mode="before",
+    )
     @classmethod
     def empty_string_ok(cls, value: object) -> object:
         # Missing/blank env vars should not crash startup — callers already

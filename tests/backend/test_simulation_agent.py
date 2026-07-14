@@ -1,29 +1,26 @@
-"""Unit tests for the AI Job Simulation Agent (Virtual Work Experience format).
+"""Unit tests for the AI Job Simulation Agent (OpenRouter is always mocked).
 
-Gemini is always mocked — these tests verify:
+These tests verify:
 - Valid VWE JSON is parsed and validated correctly.
 - JSON wrapped in a code fence is handled by the fallback extractor.
 - An empty JD text raises `InvalidSimulationResponseError` before any API call.
 - Malformed JSON raises `InvalidSimulationResponseError`.
 - Schema violations (too few tasks, missing fields, out-of-range scores) raise
   `InvalidSimulationResponseError`.
-- `httpx.TimeoutException` is wrapped as `SimulationAgentTimeoutError`.
-- `errors.APIError` is wrapped as `GeminiRequestError`.
-- The model, temperature, and response_mime_type are passed to the Gemini client
-  exactly as specified.
+- `OpenRouterTimeoutError` is wrapped as `SimulationAgentTimeoutError`.
+- `OpenRouterServerError` is wrapped as `LLMRequestError`.
+- The messages list and temperature are passed to the OpenRouter client correctly.
 """
 
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import httpx
 import pytest
-from google.genai import errors
 
 from app.agents import simulation_agent
+from app.services.openrouter_client import OpenRouterServerError, OpenRouterTimeoutError
 
 # ---------------------------------------------------------------------------
 # Sample valid VWE payload
@@ -36,7 +33,6 @@ SAMPLE_JD_TEXT = (
     "to define technical requirements for new features."
 )
 
-# Minimal valid payload — 4 tasks (the minimum), each with all required fields.
 VALID_SIMULATION_JSON: dict = {
     "job_title": "Software Engineer",
     "estimated_duration": "30-45 mins",
@@ -65,18 +61,11 @@ VALID_SIMULATION_JSON: dict = {
             "estimated_time": "5-10 mins",
             "difficulty": "Easy",
             "objective": "Identify issues in a submitted pull request.",
-            "context": (
-                "A teammate has submitted a PR for the new payments endpoint. "
-                "Your tech lead has asked you to review it before it merges."
-            ),
+            "context": "A teammate has submitted a PR for the new payments endpoint.",
             "resources": [
                 {
                     "type": "Pull Request Diff",
-                    "content": (
-                        "+ def process_payment(amount, user_id):\n"
-                        "+     result = db.execute(f'SELECT * FROM payments WHERE user={user_id}')\n"
-                        "+     return result"
-                    ),
+                    "content": "+ def process_payment(amount, user_id):\n+     result = db.execute(f'SELECT * FROM payments WHERE user={user_id}')\n+     return result",
                 }
             ],
             "activity": {
@@ -89,21 +78,11 @@ VALID_SIMULATION_JSON: dict = {
                     "D) There is no docstring",
                 ],
             },
-            "expected_solution": (
-                "B) The SQL query is vulnerable to SQL injection. "
-                "User input is interpolated directly into the query string."
-            ),
+            "expected_solution": "B) The SQL query is vulnerable to SQL injection.",
             "feedback": {
-                "positive": (
-                    "Identifying SQL injection shows you understand secure coding practices."
-                ),
-                "improvement": (
-                    "Also flag missing input validation and the absence of unit tests."
-                ),
-                "real_world_importance": (
-                    "SQL injection is one of the most common production vulnerabilities. "
-                    "Catching it in code review prevents security incidents."
-                ),
+                "positive": "Identifying SQL injection shows you understand secure coding practices.",
+                "improvement": "Also flag missing input validation and the absence of unit tests.",
+                "real_world_importance": "SQL injection is one of the most common production vulnerabilities.",
             },
             "evaluation": {
                 "communication": 7,
@@ -121,34 +100,21 @@ VALID_SIMULATION_JSON: dict = {
             "estimated_time": "5-10 mins",
             "difficulty": "Intermediate",
             "objective": "Rank the backlog items by business and technical priority.",
-            "context": (
-                "Sprint planning is tomorrow. The PM has asked you to rank the "
-                "outstanding API tasks so the team can commit to the right scope."
-            ),
+            "context": "Sprint planning is tomorrow.",
             "resources": [],
             "activity": {
                 "type": "prioritize",
-                "question": "Rank these tasks from highest to lowest priority for the sprint:",
+                "question": "Rank these tasks from highest to lowest priority:",
                 "options": [
                     "Add rate limiting to the payments endpoint",
-                    "Write API documentation",
                     "Fix the authentication bug blocking QA",
-                    "Refactor the legacy adapter",
                 ],
             },
-            "expected_solution": (
-                "Fix the authentication bug blocking QA → Add rate limiting → "
-                "Write API documentation → Refactor the legacy adapter. "
-                "Blockers for other teams take precedence; documentation and refactoring "
-                "can ship in the next sprint."
-            ),
+            "expected_solution": "Fix the authentication bug → Add rate limiting.",
             "feedback": {
                 "positive": "Prioritising the QA blocker first shows team awareness.",
-                "improvement": "Consider the effort-to-impact ratio, not just urgency.",
-                "real_world_importance": (
-                    "Effective backlog prioritisation directly affects team velocity "
-                    "and shipping dates."
-                ),
+                "improvement": "Consider the effort-to-impact ratio.",
+                "real_world_importance": "Effective backlog prioritisation directly affects team velocity.",
             },
             "evaluation": {
                 "communication": 6,
@@ -166,38 +132,18 @@ VALID_SIMULATION_JSON: dict = {
             "estimated_time": "10 mins",
             "difficulty": "Intermediate",
             "objective": "Communicate a breaking API change to downstream teams.",
-            "context": (
-                "You are deprecating the v1 payments endpoint in favour of v2. "
-                "Three teams depend on v1 and need advance notice."
-            ),
-            "resources": [
-                {
-                    "type": "Breaking Change Summary",
-                    "content": (
-                        "v1 /payments endpoint will be removed on 2026-08-01. "
-                        "v2 requires an Authorization header and returns JSON instead of XML."
-                    ),
-                }
-            ],
+            "context": "You are deprecating the v1 payments endpoint.",
+            "resources": [],
             "activity": {
                 "type": "email",
-                "question": (
-                    "Write a brief email to the dependent teams explaining the breaking change, "
-                    "the migration steps, and the deadline."
-                ),
+                "question": "Write a brief email explaining the breaking change.",
                 "options": [],
             },
-            "expected_solution": (
-                "Subject: Action Required — v1 /payments endpoint deprecation on 2026-08-01\n"
-                "The email should include: deprecation date, what changes (auth header, JSON response), "
-                "migration steps (update Authorization header, parse JSON), and offer to help."
-            ),
+            "expected_solution": "Subject: Action Required — v1 /payments endpoint deprecation.",
             "feedback": {
-                "positive": "Clear subject lines and a migration checklist reduce back-and-forth.",
-                "improvement": "Always include a point of contact and a rollback plan.",
-                "real_world_importance": (
-                    "Poor communication of breaking changes is a leading cause of production outages."
-                ),
+                "positive": "Clear subject lines reduce back-and-forth.",
+                "improvement": "Always include a point of contact.",
+                "real_world_importance": "Poor communication of breaking changes causes outages.",
             },
             "evaluation": {
                 "communication": 9,
@@ -215,42 +161,23 @@ VALID_SIMULATION_JSON: dict = {
             "estimated_time": "10-15 mins",
             "difficulty": "Hard",
             "objective": "Diagnose why a unit test is failing and propose a fix.",
-            "context": (
-                "CI has been red for two hours. The failing test is "
-                "`test_process_payment_returns_201`. You need to find the root cause."
-            ),
+            "context": "CI has been red for two hours.",
             "resources": [
                 {
                     "type": "CI Log",
-                    "content": (
-                        "FAILED tests/test_payments.py::test_process_payment_returns_201\n"
-                        "AssertionError: assert 500 == 201\n"
-                        "  Where 500 = response.status_code\n"
-                        "Traceback: KeyError: 'user_id' at payments.py:42"
-                    ),
+                    "content": "FAILED tests/test_payments.py::test_process_payment_returns_201\nAssertionError: assert 500 == 201",
                 }
             ],
             "activity": {
                 "type": "bug_analysis",
-                "question": (
-                    "Based on the CI log, what is the root cause of the failure and "
-                    "what is the minimal fix?"
-                ),
+                "question": "What is the root cause and minimal fix?",
                 "options": [],
             },
-            "expected_solution": (
-                "Root cause: the test payload is missing the `user_id` key, causing a KeyError "
-                "at line 42 which is caught and returned as a 500. "
-                "Fix: add input validation that returns 400 for missing required fields, "
-                "and update the test to send a complete payload."
-            ),
+            "expected_solution": "Root cause: missing user_id in test payload.",
             "feedback": {
-                "positive": "Reading the traceback before guessing is the right debugging instinct.",
-                "improvement": "Add input schema validation at the API boundary to prevent KeyErrors.",
-                "real_world_importance": (
-                    "A red CI pipeline blocks the entire team. Fast, accurate diagnosis "
-                    "is one of the highest-value skills in a software engineer."
-                ),
+                "positive": "Reading the traceback before guessing is the right approach.",
+                "improvement": "Add input schema validation at the API boundary.",
+                "real_world_importance": "A red CI pipeline blocks the entire team.",
             },
             "evaluation": {
                 "communication": 6,
@@ -266,20 +193,10 @@ VALID_SIMULATION_JSON: dict = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Helpers (mirror the pattern in test_career_advisor_agent.py)
-# ---------------------------------------------------------------------------
-
-
-def _fake_response(content: str) -> SimpleNamespace:
-    return SimpleNamespace(text=content)
-
-
-def _install_fake_client(monkeypatch: pytest.MonkeyPatch, generate_mock: AsyncMock) -> None:
-    fake_client = SimpleNamespace(
-        aio=SimpleNamespace(models=SimpleNamespace(generate_content=generate_mock))
-    )
-    monkeypatch.setattr(simulation_agent, "_get_client", lambda: fake_client)
+def _mock_chat_completion(monkeypatch: pytest.MonkeyPatch, return_value: str) -> AsyncMock:
+    mock = AsyncMock(return_value=return_value)
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
+    return mock
 
 
 # ---------------------------------------------------------------------------
@@ -292,8 +209,7 @@ async def test_generate_simulation_returns_valid_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Valid VWE JSON is parsed, validated, and returned as SimulationContent."""
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(VALID_SIMULATION_JSON)))
-    _install_fake_client(monkeypatch, generate_mock)
+    mock = _mock_chat_completion(monkeypatch, json.dumps(VALID_SIMULATION_JSON))
 
     result = await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
 
@@ -303,7 +219,6 @@ async def test_generate_simulation_returns_valid_content(
     assert len(result.tasks) == 4
     assert result.tasks[0].task_number == 1
     assert result.tasks[0].jd_reference == "review pull requests"
-    # Evaluation scores present and in range
     for task in result.tasks:
         ev = task.evaluation
         for score in [
@@ -315,13 +230,12 @@ async def test_generate_simulation_returns_valid_content(
             ev.adaptability,
         ]:
             assert 0 <= score <= 10
-    # Verify the Gemini client was called with the correct parameters
-    generate_mock.assert_awaited_once()
-    call_kwargs = generate_mock.await_args.kwargs
-    assert call_kwargs["model"] == "gemini-2.5-flash"
-    assert isinstance(call_kwargs["contents"], str)
-    assert call_kwargs["config"].temperature == simulation_agent.TEMPERATURE
-    assert call_kwargs["config"].response_mime_type == "application/json"
+    mock.assert_awaited_once()
+    call_kwargs = mock.await_args.kwargs
+    messages = call_kwargs["messages"]
+    assert messages[0]["role"] == "system"
+    assert messages[1]["role"] == "user"
+    assert call_kwargs["temperature"] == simulation_agent.TEMPERATURE
 
 
 @pytest.mark.asyncio
@@ -329,8 +243,7 @@ async def test_generate_simulation_returns_overview_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Overview fields are populated and the VWE metadata is present."""
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(VALID_SIMULATION_JSON)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(VALID_SIMULATION_JSON))
 
     result = await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
 
@@ -347,8 +260,7 @@ async def test_generate_simulation_task_feedback_fields_present(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Every task's feedback block contains all three required fields."""
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(VALID_SIMULATION_JSON)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(VALID_SIMULATION_JSON))
 
     result = await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
 
@@ -364,8 +276,7 @@ async def test_generate_simulation_extracts_json_from_code_fence(
 ) -> None:
     """JSON wrapped in a markdown code fence is handled by the fallback extractor."""
     fenced = f"```json\n{json.dumps(VALID_SIMULATION_JSON)}\n```"
-    generate_mock = AsyncMock(return_value=_fake_response(fenced))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, fenced)
 
     result = await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
 
@@ -381,14 +292,14 @@ async def test_generate_simulation_extracts_json_from_code_fence(
 async def test_generate_simulation_raises_on_empty_jd_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An empty JD text raises InvalidSimulationResponseError without calling Gemini."""
-    generate_mock = AsyncMock()
-    _install_fake_client(monkeypatch, generate_mock)
+    """An empty JD text raises InvalidSimulationResponseError without calling the LLM."""
+    mock = AsyncMock()
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, "")
 
-    generate_mock.assert_not_awaited()
+    mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -396,13 +307,13 @@ async def test_generate_simulation_raises_on_whitespace_only_jd(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Whitespace-only JD text is treated the same as empty."""
-    generate_mock = AsyncMock()
-    _install_fake_client(monkeypatch, generate_mock)
+    mock = AsyncMock()
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, "   \n\t  ")
 
-    generate_mock.assert_not_awaited()
+    mock.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
@@ -415,8 +326,7 @@ async def test_generate_simulation_raises_on_malformed_json(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A non-JSON response raises InvalidSimulationResponseError."""
-    generate_mock = AsyncMock(return_value=_fake_response("this is not json at all"))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, "this is not json at all")
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
@@ -427,8 +337,7 @@ async def test_generate_simulation_raises_on_empty_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An empty response content raises InvalidSimulationResponseError."""
-    generate_mock = AsyncMock(return_value=_fake_response(""))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, "")
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
@@ -445,9 +354,8 @@ async def test_generate_simulation_raises_on_too_few_tasks(
 ) -> None:
     """A payload with fewer than 4 tasks fails Pydantic validation."""
     bad_payload = dict(VALID_SIMULATION_JSON)
-    bad_payload["tasks"] = VALID_SIMULATION_JSON["tasks"][:3]  # only 3 tasks
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    bad_payload["tasks"] = VALID_SIMULATION_JSON["tasks"][:3]
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
@@ -462,8 +370,7 @@ async def test_generate_simulation_raises_on_too_many_tasks(
     extra_task["task_number"] = 7
     bad_payload = dict(VALID_SIMULATION_JSON)
     bad_payload["tasks"] = VALID_SIMULATION_JSON["tasks"] + [extra_task] * 3
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
@@ -473,13 +380,12 @@ async def test_generate_simulation_raises_on_too_many_tasks(
 async def test_generate_simulation_raises_on_out_of_range_eval_score(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An evaluation score outside 0–10 fails Pydantic validation."""
+    """An evaluation score outside 0-10 fails Pydantic validation."""
     import copy
 
     bad_payload = copy.deepcopy(VALID_SIMULATION_JSON)
-    bad_payload["tasks"][0]["evaluation"]["problem_solving"] = 11  # out of range
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    bad_payload["tasks"][0]["evaluation"]["problem_solving"] = 11
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
@@ -494,8 +400,7 @@ async def test_generate_simulation_raises_on_missing_jd_reference(
 
     bad_payload = copy.deepcopy(VALID_SIMULATION_JSON)
     del bad_payload["tasks"][0]["jd_reference"]
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
@@ -510,8 +415,7 @@ async def test_generate_simulation_raises_on_missing_overview(
 
     bad_payload = copy.deepcopy(VALID_SIMULATION_JSON)
     del bad_payload["overview"]
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
@@ -525,16 +429,15 @@ async def test_generate_simulation_raises_on_too_few_learning_outcomes(
     import copy
 
     bad_payload = copy.deepcopy(VALID_SIMULATION_JSON)
-    bad_payload["what_youll_learn"] = ["Only one outcome"]  # min is 3
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    bad_payload["what_youll_learn"] = ["Only one outcome"]
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(simulation_agent.InvalidSimulationResponseError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
 
 
 # ---------------------------------------------------------------------------
-# Gemini error wrapping
+# Error wrapping
 # ---------------------------------------------------------------------------
 
 
@@ -542,21 +445,21 @@ async def test_generate_simulation_raises_on_too_few_learning_outcomes(
 async def test_generate_simulation_raises_timeout_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """httpx.TimeoutException is wrapped as SimulationAgentTimeoutError."""
-    generate_mock = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
-    _install_fake_client(monkeypatch, generate_mock)
+    """OpenRouterTimeoutError is wrapped as SimulationAgentTimeoutError."""
+    mock = AsyncMock(side_effect=OpenRouterTimeoutError("timeout"))
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
     with pytest.raises(simulation_agent.SimulationAgentTimeoutError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)
 
 
 @pytest.mark.asyncio
-async def test_generate_simulation_raises_gemini_request_error(
+async def test_generate_simulation_raises_llm_request_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """errors.APIError is wrapped as GeminiRequestError."""
-    generate_mock = AsyncMock(side_effect=errors.APIError(500, {"error": {"message": "boom"}}))
-    _install_fake_client(monkeypatch, generate_mock)
+    """OpenRouterServerError is wrapped as LLMRequestError."""
+    mock = AsyncMock(side_effect=OpenRouterServerError("server error"))
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
-    with pytest.raises(simulation_agent.GeminiRequestError):
+    with pytest.raises(simulation_agent.LLMRequestError):
         await simulation_agent.generate_simulation(SAMPLE_ROLE_TITLE, SAMPLE_JD_TEXT)

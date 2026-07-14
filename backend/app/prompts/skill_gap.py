@@ -49,6 +49,22 @@ Design decisions
 
 from __future__ import annotations
 
+# Hard limits for text sent to the model.
+# JD: ~8 000 chars ≈ 2 000 tokens.
+# Resume: ~6 000 chars ≈ 1 500 tokens.
+# Together with the system prompt (~1 000 tokens) and compact JSON output
+# (~500 tokens) this stays well under 128 k tokens.
+_JD_MAX_CHARS = 8_000
+_RESUME_MAX_CHARS = 6_000
+
+
+def _truncate(text: str, max_chars: int, label: str = "text") -> str:
+    """Return text trimmed to max_chars with a truncation notice if cut."""
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars] + f"\n\n[...{label} truncated to fit context window...]"
+
+
 SKILL_GAP_SYSTEM_PROMPT = """\
 You are a Senior Career Coach with 15+ years of experience reviewing \
 candidates for competitive roles at technology companies, financial \
@@ -182,6 +198,9 @@ def build_skill_gap_user_prompt(
         Optional VWE performance summary. When provided, the model uses it
         to refine the readiness score (10 % weight) and next steps.
     """
+    safe_jd = _truncate(jd_text.strip(), _JD_MAX_CHARS, "JD")
+    safe_resume = _truncate(resume_text.strip(), _RESUME_MAX_CHARS, "resume")
+
     lines: list[str] = [
         f"Produce a Skill Gap Analysis for the candidate targeting the role below.",
         f"",
@@ -189,12 +208,12 @@ def build_skill_gap_user_prompt(
         f"",
         f"FULL JOB DESCRIPTION TEXT (primary source of truth):",
         '"""',
-        jd_text.strip(),
+        safe_jd,
         '"""',
         f"",
         f"CANDIDATE RESUME TEXT:",
         '"""',
-        resume_text.strip(),
+        safe_resume,
         '"""',
     ]
 

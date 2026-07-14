@@ -89,11 +89,13 @@ export type JobDescriptionUploadResponse = {
 
 /**
  * Shape passed via React Router location.state from ResumeReportPage to
- * JobDescriptionUploadPage — the only thing that page needs to continue the
- * flow is which resume to match job descriptions against.
+ * JobDescriptionUploadPage — resume id plus optional review report so the
+ * Resume Match Report page can reuse strengths / ATS without re-calling AI.
  */
 export type JobDescriptionUploadState = {
   resumeId: number
+  report?: ResumeReviewReport
+  fileName?: string
 }
 
 /* ─── Career Recommendation Agent (POST /job-matches/{resume_id}) ───────── */
@@ -226,10 +228,22 @@ export type SimulateAllResponse = {
 
 /* ─── Page-to-page navigation state shapes ──────────────────────────────── */
 
-/** Passed from JobDescriptionUploadPage → CareerMatchesPage via location.state */
+/** Passed from JobDescriptionUploadPage → ResumeMatchPage via location.state */
+export type ResumeMatchPageState = {
+  matches: JobMatch[]
+  resumeId: number
+  selectedJdTitle: string
+  primaryMatch: JobMatch
+  report?: ResumeReviewReport
+  fileName?: string
+}
+
+/** Passed from ResumeMatchPage / JobDescriptionUploadPage → CareerMatchesPage via location.state */
 export type CareerMatchesState = {
   matches: JobMatch[]
   resumeId: number
+  selectedJdTitle?: string
+  primaryMatch?: JobMatch
 }
 
 /** Passed from CareerMatchesPage → VirtualExperiencePage via location.state */

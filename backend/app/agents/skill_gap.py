@@ -2,10 +2,10 @@
 
 Compares a candidate's resume against the selected Job Description (and
 optionally the VWE performance summary) to produce a structured Skill Gap
-Analysis via Gemini.
+Analysis via OpenRouter.
 
-Per `.cursorrules`, this is the only module that calls Gemini for skill gap
-generation. Routes and services stay thin and never touch the Gemini SDK
+Per `.cursorrules`, this is the only module that calls the LLM for skill gap
+generation. Routes and services stay thin and never touch the AI client
 directly.
 
 The analysis is grounded exclusively in the uploaded Job Description — the
@@ -15,7 +15,7 @@ NEVER run against the other two recommendations.
 
 Responsibilities:
     - Accept resume text, JD text, role title, and optional enrichment inputs.
-    - Call Gemini with the Skill Gap prompt (system + user).
+    - Call the LLM with the Skill Gap prompt (system + user).
     - Extract and validate the JSON response into `SkillGapContent`.
     - Return the validated `SkillGapContent` — never raw text.
     - Raise descriptive, typed exceptions on every failure path so the
@@ -29,18 +29,20 @@ import json
 import logging
 import re
 
-import httpx
-from google import genai
-from google.genai import errors, types
 from pydantic import ValidationError
 
-from app.core.config import settings
 from app.models.skill_gap import SkillGapContent
 from app.prompts.skill_gap import SKILL_GAP_SYSTEM_PROMPT, build_skill_gap_user_prompt
+from app.services import openrouter_client
+from app.services.openrouter_client import (
+    OpenRouterAuthError,
+    OpenRouterError,
+    OpenRouterRateLimitError,
+    OpenRouterServerError,
+    OpenRouterTimeoutError,
+)
 
 logger = logging.getLogger(__name__)
-
-MODEL_NAME = "gemini-2.5-flash"
 
 # Skill gap analysis is analytical — lower temperature produces more
 # consistent, calibrated outputs than the Simulation Agent (0.7).
@@ -62,16 +64,16 @@ class SkillGapAgentError(Exception):
     """Base class for every Skill Gap Agent failure."""
 
 
-class GeminiRequestError(SkillGapAgentError):
-    """The Gemini API call itself failed (connection, auth, rate limit, server error)."""
+class LLMRequestError(SkillGapAgentError):
+    """The LLM API call itself failed (connection, auth, rate limit, server error)."""
 
 
 class SkillGapAgentTimeoutError(SkillGapAgentError):
-    """The Gemini API call did not complete within `REQUEST_TIMEOUT_SECONDS`."""
+    """The LLM API call did not complete within `REQUEST_TIMEOUT_SECONDS`."""
 
 
 class InvalidSkillGapResponseError(SkillGapAgentError):
-    """Gemini's response could not be parsed or validated into `SkillGapContent`."""
+    """The LLM response could not be parsed or validated into `SkillGapContent`."""
 
 
 # ---------------------------------------------------------------------------
@@ -79,26 +81,8 @@ class InvalidSkillGapResponseError(SkillGapAgentError):
 # ---------------------------------------------------------------------------
 
 
-def _get_client() -> genai.Client:
-    """Build a Gemini client from settings.
-
-    Constructed at call time (not module level) so tests can monkeypatch
-    `settings.gemini_api_key` without reloading the module.
-    """
-    return genai.Client(
-        api_key=settings.gemini_api_key,
-        http_options=types.HttpOptions(timeout=int(REQUEST_TIMEOUT_SECONDS * 1000)),
-    )
-
-
 def _extract_json_object(raw_text: str) -> str:
-    """Best-effort extraction of a bare JSON object from the model's raw text.
-
-    `response_mime_type="application/json"` should guarantee bare JSON,
-    but this guard handles the rare case where the model wraps its output in
-    a markdown code fence or adds stray commentary — matching the pattern
-    used in `app.agents.simulation_agent` and `app.agents.career_advisor`.
-    """
+    """Best-effort extraction of a bare JSON object from the model's raw text."""
     stripped = raw_text.strip()
 
     fenced = _JSON_FENCE_RE.search(stripped)
@@ -113,13 +97,25 @@ def _extract_json_object(raw_text: str) -> str:
     return stripped
 
 
+def _normalize_string_list(value: object, *, min_items: int, pad: str) -> list[str]:
+    if isinstance(value, str):
+        items = [part.strip() for part in value.split("\n") if part.strip()]
+    elif isinstance(value, list):
+        items = [str(item).strip() for item in value if str(item).strip()]
+    else:
+        items = []
+    while len(items) < min_items:
+        items.append(pad)
+    return items
+
+
 def _parse_and_validate(raw_text: str) -> SkillGapContent:
-    """Parse Gemini's raw text into a validated `SkillGapContent`.
+    """Parse the LLM's raw text into a validated `SkillGapContent`.
 
     Parameters
     ----------
     raw_text:
-        The raw string returned by `response.text`.
+        The raw string returned by the LLM.
 
     Returns
     -------
@@ -146,6 +142,43 @@ def _parse_and_validate(raw_text: str) -> SkillGapContent:
             f"got {type(payload).__name__}."
         )
 
+    # Soften under-length list fields before validation (same failure class as
+    # resume review: OpenRouter 200 + too_short → Invalid*ResponseError → 502).
+    try:
+        score = int(round(float(payload.get("readiness_score", 0))))
+    except (TypeError, ValueError):
+        score = 0
+    payload["readiness_score"] = max(0, min(100, score))
+
+    summary = payload.get("summary")
+    if not isinstance(summary, str) or not summary.strip():
+        payload["summary"] = (
+            "Skill gap analysis completed; review existing skills and next steps below."
+        )
+    else:
+        payload["summary"] = summary.strip()
+
+    payload["existing_skills"] = _normalize_string_list(
+        payload.get("existing_skills"),
+        min_items=1,
+        pad="Transferable baseline skills from the resume",
+    )
+    payload["missing_technical_skills"] = [
+        str(item).strip()
+        for item in (payload.get("missing_technical_skills") or [])
+        if str(item).strip()
+    ]
+    payload["missing_soft_skills"] = [
+        str(item).strip()
+        for item in (payload.get("missing_soft_skills") or [])
+        if str(item).strip()
+    ]
+    payload["recommended_next_steps"] = _normalize_string_list(
+        payload.get("recommended_next_steps"),
+        min_items=1,
+        pad="Close the highest-priority skill gap from the JD with a focused practice project.",
+    )
+
     try:
         return SkillGapContent.model_validate(payload)
     except ValidationError as exc:
@@ -169,7 +202,7 @@ async def analyse_skill_gap(
     """Run the Skill Gap Agent for the user's chosen career.
 
     Sends the resume, Job Description, role title, and any optional enrichment
-    inputs to Gemini and returns a fully validated `SkillGapContent`.
+    inputs to the LLM and returns a fully validated `SkillGapContent`.
 
     The JD is the primary source of truth — skills are never reported unless
     they appear in the JD text. Only the chosen career's JD is supplied;
@@ -203,13 +236,13 @@ async def analyse_skill_gap(
     Raises
     ------
     InvalidSkillGapResponseError
-        If the JD text is empty, or if Gemini's response cannot be parsed
+        If the JD text is empty, or if the LLM response cannot be parsed
         or validated.
-    GeminiRequestError
-        The Gemini API call failed (network, authentication, rate limit,
+    LLMRequestError
+        The LLM API call failed (network, authentication, rate limit,
         or server error).
     SkillGapAgentTimeoutError
-        The Gemini API call did not complete within `REQUEST_TIMEOUT_SECONDS`.
+        The LLM API call did not complete within `REQUEST_TIMEOUT_SECONDS`.
     """
     if not jd_text or not jd_text.strip():
         raise InvalidSkillGapResponseError(
@@ -223,7 +256,6 @@ async def analyse_skill_gap(
             f"the resume text is empty."
         )
 
-    client = _get_client()
     user_prompt = build_skill_gap_user_prompt(
         resume_text=resume_text,
         jd_text=jd_text,
@@ -231,30 +263,33 @@ async def analyse_skill_gap(
         resume_review_summary=resume_review_summary,
         simulation_metadata=simulation_metadata,
     )
+    messages = [
+        {"role": "system", "content": SKILL_GAP_SYSTEM_PROMPT},
+        {"role": "user", "content": user_prompt},
+    ]
 
     logger.info("Skill Gap Agent starting analysis for role: '%s'.", role_title)
 
     try:
-        response = await client.aio.models.generate_content(
-            model=MODEL_NAME,
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=SKILL_GAP_SYSTEM_PROMPT,
-                temperature=TEMPERATURE,
-                response_mime_type="application/json",
-            ),
+        raw_text = await openrouter_client.chat_completion(
+            messages=messages,
+            temperature=TEMPERATURE,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            max_tokens=2048,
         )
-    except httpx.TimeoutException as exc:
+    except OpenRouterTimeoutError as exc:
         raise SkillGapAgentTimeoutError(
             f"Skill Gap Agent timed out analysing role '{role_title}'."
         ) from exc
-    except errors.APIError as exc:
-        raise GeminiRequestError(
-            f"Gemini request failed during skill gap analysis for role "
+    except (OpenRouterAuthError, OpenRouterRateLimitError, OpenRouterServerError, OpenRouterError) as exc:
+        logger.error(
+            "Skill Gap Agent LLM request failed for role '%s': %s", role_title, exc
+        )
+        raise LLMRequestError(
+            f"AI service request failed during skill gap analysis for role "
             f"'{role_title}': {exc}"
         ) from exc
 
-    raw_text = response.text
     if not raw_text:
         raise InvalidSkillGapResponseError(
             f"Skill Gap Agent returned an empty response for role '{role_title}'."

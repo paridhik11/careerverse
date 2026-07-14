@@ -23,6 +23,7 @@ import { RESUME_ID_STORAGE_KEY } from "@/services/api"
 
 const RESUME_ID_PATTERNS: RegExp[] = [
   /^\/resume-report\/(\d+)/,
+  /^\/resume-match\/(\d+)/,
   /^\/career-matches\/(\d+)/,
   /^\/experience\/(\d+)/,
 ]

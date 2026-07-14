@@ -1,16 +1,16 @@
 """Career Recommendation Agent.
 
-Sends a parsed resume + RAG-retrieved Job Description context to Gemini
+Sends a parsed resume + RAG-retrieved Job Description context to OpenRouter
 and returns exactly three validated, structured career matches
 (`CareerAdvisorAgentResponse`). Per `.cursorrules`, this is the only module
-allowed to call Gemini for career recommendations — routes and services stay
-thin and never talk to the Gemini SDK directly.
+allowed to call the LLM for career recommendations — routes and services stay
+thin and never talk to the AI client directly.
 
 Responsibilities:
     - Receive parsed resume text, an optional resume review summary, and the
       Top-K retrieved Job Description chunks from ChromaDB (via
       `app.rag.retriever.retrieve_relevant_job_descriptions`).
-    - Call Gemini with the Career Recommendation prompt.
+    - Call the LLM with the Career Recommendation prompt.
     - Validate the JSON response against `CareerAdvisorAgentResponse`.
     - Enforce that every recommendation is grounded in a JD that was actually
       retrieved — the agent never trusts the model to have followed that
@@ -21,22 +21,29 @@ Responsibilities:
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any
 
-import httpx
-from google import genai
-from google.genai import errors, types
 from pydantic import ValidationError
 
-from app.core.config import settings
+logger = logging.getLogger(__name__)
+
 from app.models.job_match import CareerAdvisorAgentResponse, CareerMatchRecommendation
 from app.prompts.career_advisor import (
     CAREER_ADVISOR_SYSTEM_PROMPT,
     build_career_advisor_user_prompt,
 )
+from app.services import openrouter_client
+from app.services.openrouter_client import (
+    OpenRouterAuthError,
+    OpenRouterError,
+    OpenRouterInvalidResponseError,
+    OpenRouterRateLimitError,
+    OpenRouterServerError,
+    OpenRouterTimeoutError,
+)
 
-MODEL_NAME = "gemini-2.5-flash"
 REQUEST_TIMEOUT_SECONDS = 45.0
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL)
 
@@ -45,41 +52,24 @@ class CareerAdvisorError(Exception):
     """Base class for every Career Recommendation Agent failure."""
 
 
-class GeminiRequestError(CareerAdvisorError):
-    """The Gemini API call itself failed (connection, auth, rate limit, server error)."""
+class LLMRequestError(CareerAdvisorError):
+    """The LLM API call itself failed (connection, auth, rate limit, server error)."""
 
 
 class CareerAdvisorTimeoutError(CareerAdvisorError):
-    """The Gemini API call did not complete within `REQUEST_TIMEOUT_SECONDS`."""
+    """The LLM API call did not complete within `REQUEST_TIMEOUT_SECONDS`."""
 
 
 class InvalidCareerAdvisorResponseError(CareerAdvisorError):
-    """Gemini's response could not be parsed into three valid, retrieval-grounded matches."""
+    """The LLM response could not be parsed into three valid, retrieval-grounded matches."""
 
 
 class NoRetrievedJobDescriptionsError(CareerAdvisorError):
     """There is nothing retrieved from RAG to compare the resume against."""
 
 
-def _get_client() -> genai.Client:
-    """Build a Gemini client from the `GEMINI_API_KEY` environment variable.
-
-    Not module-level so tests can monkeypatch `settings.gemini_api_key`
-    without having to reload this module.
-    """
-    return genai.Client(
-        api_key=settings.gemini_api_key,
-        http_options=types.HttpOptions(timeout=int(REQUEST_TIMEOUT_SECONDS * 1000)),
-    )
-
-
 def _extract_json_object(raw_text: str) -> str:
-    """Best-effort extraction of a bare JSON object from the model's raw text.
-
-    `response_mime_type="application/json"` should already guarantee bare
-    JSON, but this guards against the model wrapping it in a code fence or
-    adding stray text anyway, instead of failing the whole request.
-    """
+    """Best-effort extraction of a bare JSON object from the model's raw text."""
     stripped = raw_text.strip()
     fenced = _JSON_FENCE_RE.search(stripped)
     if fenced:
@@ -92,7 +82,7 @@ def _extract_json_object(raw_text: str) -> str:
 
 
 def _parse_agent_response(raw_text: str) -> CareerAdvisorAgentResponse:
-    """Parse and validate Gemini's raw output into a `CareerAdvisorAgentResponse`."""
+    """Parse and validate the LLM's raw output into a `CareerAdvisorAgentResponse`."""
     candidate = _extract_json_object(raw_text)
 
     try:
@@ -166,12 +156,12 @@ async def generate_career_matches(
     NoRetrievedJobDescriptionsError
         `retrieved_job_descriptions` is empty — there is nothing to compare
         the resume against.
-    GeminiRequestError
-        The Gemini API call failed (network, auth, rate limit, server error).
+    LLMRequestError
+        The LLM API call failed (network, auth, rate limit, server error).
     CareerAdvisorTimeoutError
-        The Gemini API call did not complete within the configured timeout.
+        The LLM API call did not complete within the configured timeout.
     InvalidCareerAdvisorResponseError
-        Gemini's response could not be parsed into three valid,
+        The LLM response could not be parsed into three valid,
         retrieval-grounded matches.
     """
     if not retrieved_job_descriptions:
@@ -180,31 +170,31 @@ async def generate_career_matches(
             "requesting career recommendations."
         )
 
-    client = _get_client()
     user_prompt = build_career_advisor_user_prompt(
         resume_text,
         retrieved_job_descriptions,
         resume_review_summary=resume_review_summary,
     )
+    messages = [
+        {"role": "system", "content": CAREER_ADVISOR_SYSTEM_PROMPT},
+        {"role": "user", "content": user_prompt},
+    ]
 
     try:
-        response = await client.aio.models.generate_content(
-            model=MODEL_NAME,
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=CAREER_ADVISOR_SYSTEM_PROMPT,
-                temperature=0.3,
-                response_mime_type="application/json",
-            ),
+        raw_text = await openrouter_client.chat_completion(
+            messages=messages,
+            temperature=0.3,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            max_tokens=2048,
         )
-    except httpx.TimeoutException as exc:
+    except OpenRouterTimeoutError as exc:
         raise CareerAdvisorTimeoutError(
-            "Career Recommendation Agent timed out waiting for Gemini."
+            "Career Recommendation Agent timed out waiting for the AI service."
         ) from exc
-    except errors.APIError as exc:
-        raise GeminiRequestError(f"Gemini request failed: {exc}") from exc
+    except (OpenRouterAuthError, OpenRouterRateLimitError, OpenRouterServerError, OpenRouterError) as exc:
+        logger.error("Career Recommendation Agent LLM request failed: %s", exc)
+        raise LLMRequestError(f"AI service request failed: {exc}") from exc
 
-    raw_text = response.text
     if not raw_text:
         raise InvalidCareerAdvisorResponseError(
             "Career Recommendation Agent returned an empty response."

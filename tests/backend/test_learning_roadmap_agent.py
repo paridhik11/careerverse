@@ -1,6 +1,6 @@
-"""Unit tests for the Learning Roadmap Agent.
+"""Unit tests for the Learning Roadmap Agent (OpenRouter is always mocked).
 
-Gemini is always mocked — these tests verify:
+These tests verify:
 - Valid JSON is parsed and validated correctly into RoadmapContent.
 - JSON wrapped in a markdown code fence is handled by the fallback extractor.
 - Empty JD text raises InvalidLearningPlanResponseError before any API call.
@@ -9,24 +9,21 @@ Gemini is always mocked — these tests verify:
 - Malformed JSON raises InvalidLearningPlanResponseError.
 - Schema violations (missing month_1, missing focus field) raise
   InvalidLearningPlanResponseError.
-- httpx.TimeoutException is wrapped as LearningPlanAgentTimeoutError.
-- errors.APIError is wrapped as GeminiRequestError.
-- The model, temperature, and response_mime_type are passed to the Gemini
-  client exactly as specified.
+- OpenRouterTimeoutError is wrapped as LearningPlanAgentTimeoutError.
+- OpenRouterServerError is wrapped as LLMRequestError.
+- The messages list and temperature are passed to the OpenRouter client correctly.
 - All three months are present and have the correct structure.
 """
 
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import httpx
 import pytest
-from google.genai import errors
 
 from app.agents import learning_plan as learning_plan_agent
+from app.services.openrouter_client import OpenRouterServerError, OpenRouterTimeoutError
 
 # ---------------------------------------------------------------------------
 # Sample inputs
@@ -66,7 +63,6 @@ SAMPLE_SKILL_GAP = json.dumps(
     }
 )
 
-# Minimal valid RoadmapContent payload.
 VALID_ROADMAP_JSON: dict = {
     "month_1": {
         "focus": "Build Apache Spark and ETL pipeline foundations required by the Data Engineer JD.",
@@ -139,20 +135,10 @@ VALID_ROADMAP_JSON: dict = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Helpers (mirror the pattern from test_skill_gap_agent.py)
-# ---------------------------------------------------------------------------
-
-
-def _fake_response(content: str) -> SimpleNamespace:
-    return SimpleNamespace(text=content)
-
-
-def _install_fake_client(monkeypatch: pytest.MonkeyPatch, generate_mock: AsyncMock) -> None:
-    fake_client = SimpleNamespace(
-        aio=SimpleNamespace(models=SimpleNamespace(generate_content=generate_mock))
-    )
-    monkeypatch.setattr(learning_plan_agent, "_get_client", lambda: fake_client)
+def _mock_chat_completion(monkeypatch: pytest.MonkeyPatch, return_value: str) -> AsyncMock:
+    mock = AsyncMock(return_value=return_value)
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
+    return mock
 
 
 # ---------------------------------------------------------------------------
@@ -165,10 +151,7 @@ async def test_generate_learning_plan_returns_valid_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Valid roadmap JSON is parsed, validated, and returned as RoadmapContent."""
-    generate_mock = AsyncMock(
-        return_value=_fake_response(json.dumps(VALID_ROADMAP_JSON))
-    )
-    _install_fake_client(monkeypatch, generate_mock)
+    mock = _mock_chat_completion(monkeypatch, json.dumps(VALID_ROADMAP_JSON))
 
     result = await learning_plan_agent.generate_learning_plan(
         resume_text=SAMPLE_RESUME,
@@ -182,12 +165,16 @@ async def test_generate_learning_plan_returns_valid_content(
     assert len(result.month_1.projects) >= 1
     assert len(result.month_1.resources) >= 1
     assert len(result.month_1.milestones) >= 1
-
     assert result.month_2.focus
     assert len(result.month_2.topics) >= 1
-
     assert result.month_3.focus
     assert len(result.month_3.topics) >= 1
+    mock.assert_awaited_once()
+    call_kwargs = mock.await_args.kwargs
+    messages = call_kwargs["messages"]
+    assert messages[0]["role"] == "system"
+    assert messages[1]["role"] == "user"
+    assert call_kwargs["temperature"] == learning_plan_agent.TEMPERATURE
 
 
 @pytest.mark.asyncio
@@ -195,10 +182,7 @@ async def test_generate_learning_plan_all_three_months_present(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """All three months are present in the returned RoadmapContent."""
-    generate_mock = AsyncMock(
-        return_value=_fake_response(json.dumps(VALID_ROADMAP_JSON))
-    )
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(VALID_ROADMAP_JSON))
 
     result = await learning_plan_agent.generate_learning_plan(
         resume_text=SAMPLE_RESUME,
@@ -213,38 +197,12 @@ async def test_generate_learning_plan_all_three_months_present(
 
 
 @pytest.mark.asyncio
-async def test_generate_learning_plan_calls_gemini_with_correct_params(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The correct model, temperature, and response_mime_type are passed to Gemini."""
-    generate_mock = AsyncMock(
-        return_value=_fake_response(json.dumps(VALID_ROADMAP_JSON))
-    )
-    _install_fake_client(monkeypatch, generate_mock)
-
-    await learning_plan_agent.generate_learning_plan(
-        resume_text=SAMPLE_RESUME,
-        jd_text=SAMPLE_JD,
-        role_title=SAMPLE_ROLE,
-        skill_gap_summary=SAMPLE_SKILL_GAP,
-    )
-
-    generate_mock.assert_awaited_once()
-    kwargs = generate_mock.await_args.kwargs
-    assert kwargs["model"] == "gemini-2.5-flash"
-    assert isinstance(kwargs["contents"], str)
-    assert kwargs["config"].temperature == learning_plan_agent.TEMPERATURE
-    assert kwargs["config"].response_mime_type == "application/json"
-
-
-@pytest.mark.asyncio
 async def test_generate_learning_plan_extracts_json_from_code_fence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """JSON wrapped in a markdown code fence is extracted by the fallback."""
     fenced = f"```json\n{json.dumps(VALID_ROADMAP_JSON)}\n```"
-    generate_mock = AsyncMock(return_value=_fake_response(fenced))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, fenced)
 
     result = await learning_plan_agent.generate_learning_plan(
         resume_text=SAMPLE_RESUME,
@@ -265,9 +223,9 @@ async def test_generate_learning_plan_extracts_json_from_code_fence(
 async def test_generate_learning_plan_raises_on_empty_jd_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Empty JD text raises InvalidLearningPlanResponseError without calling Gemini."""
-    generate_mock = AsyncMock()
-    _install_fake_client(monkeypatch, generate_mock)
+    """Empty JD text raises InvalidLearningPlanResponseError without calling the LLM."""
+    mock = AsyncMock()
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
     with pytest.raises(learning_plan_agent.InvalidLearningPlanResponseError):
         await learning_plan_agent.generate_learning_plan(
@@ -277,16 +235,16 @@ async def test_generate_learning_plan_raises_on_empty_jd_text(
             skill_gap_summary=SAMPLE_SKILL_GAP,
         )
 
-    generate_mock.assert_not_awaited()
+    mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_generate_learning_plan_raises_on_whitespace_jd(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Whitespace-only JD text raises without calling Gemini."""
-    generate_mock = AsyncMock()
-    _install_fake_client(monkeypatch, generate_mock)
+    """Whitespace-only JD text raises without calling the LLM."""
+    mock = AsyncMock()
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
     with pytest.raises(learning_plan_agent.InvalidLearningPlanResponseError):
         await learning_plan_agent.generate_learning_plan(
@@ -296,16 +254,16 @@ async def test_generate_learning_plan_raises_on_whitespace_jd(
             skill_gap_summary=SAMPLE_SKILL_GAP,
         )
 
-    generate_mock.assert_not_awaited()
+    mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_generate_learning_plan_raises_on_empty_resume(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Empty resume text raises InvalidLearningPlanResponseError without Gemini call."""
-    generate_mock = AsyncMock()
-    _install_fake_client(monkeypatch, generate_mock)
+    """Empty resume text raises InvalidLearningPlanResponseError without LLM call."""
+    mock = AsyncMock()
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
     with pytest.raises(learning_plan_agent.InvalidLearningPlanResponseError):
         await learning_plan_agent.generate_learning_plan(
@@ -315,7 +273,7 @@ async def test_generate_learning_plan_raises_on_empty_resume(
             skill_gap_summary=SAMPLE_SKILL_GAP,
         )
 
-    generate_mock.assert_not_awaited()
+    mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -323,8 +281,8 @@ async def test_generate_learning_plan_raises_on_empty_skill_gap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Empty skill gap summary raises InvalidLearningPlanResponseError."""
-    generate_mock = AsyncMock()
-    _install_fake_client(monkeypatch, generate_mock)
+    mock = AsyncMock()
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
     with pytest.raises(learning_plan_agent.InvalidLearningPlanResponseError):
         await learning_plan_agent.generate_learning_plan(
@@ -334,7 +292,7 @@ async def test_generate_learning_plan_raises_on_empty_skill_gap(
             skill_gap_summary="",
         )
 
-    generate_mock.assert_not_awaited()
+    mock.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
@@ -347,8 +305,7 @@ async def test_generate_learning_plan_raises_on_malformed_json(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A non-JSON response raises InvalidLearningPlanResponseError."""
-    generate_mock = AsyncMock(return_value=_fake_response("not valid json"))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, "not valid json")
 
     with pytest.raises(learning_plan_agent.InvalidLearningPlanResponseError):
         await learning_plan_agent.generate_learning_plan(
@@ -363,9 +320,8 @@ async def test_generate_learning_plan_raises_on_malformed_json(
 async def test_generate_learning_plan_raises_on_empty_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An empty Gemini response raises InvalidLearningPlanResponseError."""
-    generate_mock = AsyncMock(return_value=_fake_response(""))
-    _install_fake_client(monkeypatch, generate_mock)
+    """An empty response raises InvalidLearningPlanResponseError."""
+    _mock_chat_completion(monkeypatch, "")
 
     with pytest.raises(learning_plan_agent.InvalidLearningPlanResponseError):
         await learning_plan_agent.generate_learning_plan(
@@ -390,8 +346,7 @@ async def test_generate_learning_plan_raises_on_missing_month_1(
 
     bad_payload = copy.deepcopy(VALID_ROADMAP_JSON)
     del bad_payload["month_1"]
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(learning_plan_agent.InvalidLearningPlanResponseError):
         await learning_plan_agent.generate_learning_plan(
@@ -411,8 +366,7 @@ async def test_generate_learning_plan_raises_on_missing_focus_in_month(
 
     bad_payload = copy.deepcopy(VALID_ROADMAP_JSON)
     del bad_payload["month_2"]["focus"]
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(learning_plan_agent.InvalidLearningPlanResponseError):
         await learning_plan_agent.generate_learning_plan(
@@ -432,8 +386,7 @@ async def test_generate_learning_plan_raises_on_missing_topics_in_month(
 
     bad_payload = copy.deepcopy(VALID_ROADMAP_JSON)
     del bad_payload["month_3"]["topics"]
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(learning_plan_agent.InvalidLearningPlanResponseError):
         await learning_plan_agent.generate_learning_plan(
@@ -453,8 +406,7 @@ async def test_generate_learning_plan_raises_on_non_list_topics(
 
     bad_payload = copy.deepcopy(VALID_ROADMAP_JSON)
     bad_payload["month_1"]["topics"] = "This should be a list"
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(learning_plan_agent.InvalidLearningPlanResponseError):
         await learning_plan_agent.generate_learning_plan(
@@ -466,7 +418,7 @@ async def test_generate_learning_plan_raises_on_non_list_topics(
 
 
 # ---------------------------------------------------------------------------
-# Gemini error wrapping
+# Error wrapping
 # ---------------------------------------------------------------------------
 
 
@@ -474,9 +426,9 @@ async def test_generate_learning_plan_raises_on_non_list_topics(
 async def test_generate_learning_plan_raises_timeout_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """httpx.TimeoutException is wrapped as LearningPlanAgentTimeoutError."""
-    generate_mock = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
-    _install_fake_client(monkeypatch, generate_mock)
+    """OpenRouterTimeoutError is wrapped as LearningPlanAgentTimeoutError."""
+    mock = AsyncMock(side_effect=OpenRouterTimeoutError("timeout"))
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
     with pytest.raises(learning_plan_agent.LearningPlanAgentTimeoutError):
         await learning_plan_agent.generate_learning_plan(
@@ -488,14 +440,14 @@ async def test_generate_learning_plan_raises_timeout_error(
 
 
 @pytest.mark.asyncio
-async def test_generate_learning_plan_raises_gemini_request_error(
+async def test_generate_learning_plan_raises_llm_request_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """errors.APIError is wrapped as GeminiRequestError."""
-    generate_mock = AsyncMock(side_effect=errors.APIError(500, {"error": {"message": "boom"}}))
-    _install_fake_client(monkeypatch, generate_mock)
+    """OpenRouterServerError is wrapped as LLMRequestError."""
+    mock = AsyncMock(side_effect=OpenRouterServerError("server error"))
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
-    with pytest.raises(learning_plan_agent.GeminiRequestError):
+    with pytest.raises(learning_plan_agent.LLMRequestError):
         await learning_plan_agent.generate_learning_plan(
             resume_text=SAMPLE_RESUME,
             jd_text=SAMPLE_JD,
@@ -514,10 +466,7 @@ async def test_generate_learning_plan_month1_focus_matches_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Month 1 focus from the parsed result matches the payload exactly."""
-    generate_mock = AsyncMock(
-        return_value=_fake_response(json.dumps(VALID_ROADMAP_JSON))
-    )
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(VALID_ROADMAP_JSON))
 
     result = await learning_plan_agent.generate_learning_plan(
         resume_text=SAMPLE_RESUME,

@@ -6,7 +6,7 @@
  *   const stages = useProgressiveLoader([
  *     "Uploading Resume",
  *     "Reviewing Resume",
- *     "Finding Career Matches",
+ *     "Exploring Careers",
  *   ])
  *   stages.complete(0)  // marks stage 0 done, activates stage 1
  *

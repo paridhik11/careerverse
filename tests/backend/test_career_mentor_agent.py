@@ -1,29 +1,27 @@
-"""Unit tests for the Career Mentor Agent.
+"""Unit tests for the Career Mentor Agent (OpenRouter is always mocked).
 
-Gemini is always mocked — these tests verify:
+These tests verify:
 - The agent streams text chunks when the skill gap context is present.
 - The mentor prompt contains the "not yet generated" note for skill gap when
   the context block carries that annotation (hallucination guard).
 - The mentor can be asked for interview questions and returns a response
   grounded in the assembled context (prompt includes JD text).
-- httpx.TimeoutException is wrapped as CareerMentorTimeoutError.
-- errors.APIError is wrapped as GeminiRequestError.
-- The model name and temperature are passed to Gemini as specified.
+- OpenRouterTimeoutError is wrapped as CareerMentorTimeoutError.
+- OpenRouterServerError is wrapped as LLMRequestError.
+- The temperature is passed to the OpenRouter client as specified.
 - Conversation history is forwarded correctly in the messages list.
 """
 
 from __future__ import annotations
 
 import asyncio
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
-import httpx
 import pytest
-from google.genai import errors
 
 from app.agents import career_mentor as career_mentor_agent
-from app.prompts.career_mentor import CAREER_MENTOR_SYSTEM_PROMPT, build_mentor_user_prompt
+from app.prompts.career_mentor import build_mentor_user_prompt
+from app.services.openrouter_client import OpenRouterServerError, OpenRouterTimeoutError
 
 # ---------------------------------------------------------------------------
 # Sample data
@@ -109,45 +107,18 @@ HISTORY_TURNS = [
 
 
 # ---------------------------------------------------------------------------
-# Helpers — fake streaming client
+# Helper: async generator mock for streaming
 # ---------------------------------------------------------------------------
 
 
-def _make_fake_chunk(text: str) -> SimpleNamespace:
-    """Build a minimal streaming chunk object that mirrors Gemini's real shape."""
-    return SimpleNamespace(text=text)
+def _make_stream_mock(chunks: list[str]):
+    """Return an async generator that yields the given chunks."""
 
+    async def _fake_stream(**kwargs):
+        for chunk in chunks:
+            yield chunk
 
-def _make_fake_stream(chunks: list[str]):
-    """Return an async context manager / async iterator that yields fake chunks."""
-
-    async def _aiter():
-        for text in chunks:
-            yield _make_fake_chunk(text)
-
-    # The agent calls `await client.aio.models.generate_content_stream(...)` and
-    # then iterates the returned object with `async for`. We need the stream
-    # call to return an async iterable — we use a simple async generator.
-    return _aiter()
-
-
-def _install_fake_streaming_client(
-    monkeypatch: pytest.MonkeyPatch,
-    chunks: list[str],
-) -> AsyncMock:
-    """Monkeypatch the agent's `_get_client` to return a fake streaming client."""
-    stream = _make_fake_stream(chunks)
-    stream_mock = AsyncMock(return_value=stream)
-    fake_client = SimpleNamespace(
-        aio=SimpleNamespace(models=SimpleNamespace(generate_content_stream=stream_mock))
-    )
-    monkeypatch.setattr(career_mentor_agent, "_get_client", lambda: fake_client)
-    return stream_mock
-
-
-# ---------------------------------------------------------------------------
-# Helper: collect all streamed chunks
-# ---------------------------------------------------------------------------
+    return _fake_stream
 
 
 async def _collect(gen) -> list[str]:
@@ -156,14 +127,6 @@ async def _collect(gen) -> list[str]:
     async for chunk in gen:
         result.append(chunk)
     return result
-
-
-def _content_text(content) -> str:
-    return "".join(part.text or "" for part in content.parts)
-
-
-def _contents_text(contents) -> str:
-    return " ".join(_content_text(content) for content in contents)
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +140,10 @@ async def test_stream_response_yields_chunks_when_skill_gap_exists(
 ) -> None:
     """When skill gap context is present, the agent streams non-empty chunks."""
     expected = ["Your readiness", " score is 65/100.", " TensorFlow is the key gap."]
-    _install_fake_streaming_client(monkeypatch, expected)
+    monkeypatch.setattr(
+        "app.services.openrouter_client.stream_chat_completion",
+        _make_stream_mock(expected),
+    )
 
     chunks = await _collect(
         career_mentor_agent.stream_response(
@@ -195,14 +161,12 @@ async def test_stream_response_yields_chunks_when_skill_gap_exists(
 async def test_stream_response_yields_chunks_when_skill_gap_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When skill gap is missing from context, the agent still streams a response.
-
-    The mentor should state the gap is missing rather than hallucinating.
-    The test verifies the agent streams successfully — the prompt design
-    (in `prompts/career_mentor.py`) enforces the "say what's missing" rule.
-    """
+    """When skill gap is missing from context, the agent still streams a response."""
     expected = ["The Skill Gap Agent has not run yet."]
-    _install_fake_streaming_client(monkeypatch, expected)
+    monkeypatch.setattr(
+        "app.services.openrouter_client.stream_chat_completion",
+        _make_stream_mock(expected),
+    )
 
     chunks = await _collect(
         career_mentor_agent.stream_response(
@@ -217,20 +181,20 @@ async def test_stream_response_yields_chunks_when_skill_gap_missing(
 
 
 @pytest.mark.asyncio
-async def test_stream_response_includes_skill_gap_context_in_prompt(
+async def test_stream_response_includes_skill_gap_context_in_messages(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The skill gap data appears in the user turn sent to Gemini."""
-    captured_kwargs: dict = {}
+    """The skill gap data appears in the messages list sent to the LLM."""
+    captured_messages: list = []
 
-    async def capturing_stream(**kwargs):
-        captured_kwargs.update(kwargs)
-        return _make_fake_stream(["ok"])
+    async def capturing_stream(messages, **kwargs):
+        captured_messages.extend(messages)
+        yield "ok"
 
-    fake_client = SimpleNamespace(
-        aio=SimpleNamespace(models=SimpleNamespace(generate_content_stream=capturing_stream))
+    monkeypatch.setattr(
+        "app.services.openrouter_client.stream_chat_completion",
+        capturing_stream,
     )
-    monkeypatch.setattr(career_mentor_agent, "_get_client", lambda: fake_client)
 
     await _collect(
         career_mentor_agent.stream_response(
@@ -240,7 +204,7 @@ async def test_stream_response_includes_skill_gap_context_in_prompt(
         )
     )
 
-    full_prompt = _contents_text(captured_kwargs["contents"])
+    full_prompt = " ".join(m["content"] for m in captured_messages)
     assert "TensorFlow" in full_prompt
     assert "SKILL GAP ANALYSIS" in full_prompt
     assert "Readiness Score: 65/100" in full_prompt
@@ -251,16 +215,16 @@ async def test_stream_response_context_notes_missing_skill_gap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When skill gap is missing, the 'Not yet generated' note reaches the prompt."""
-    captured_kwargs: dict = {}
+    captured_messages: list = []
 
-    async def capturing_stream(**kwargs):
-        captured_kwargs.update(kwargs)
-        return _make_fake_stream(["ok"])
+    async def capturing_stream(messages, **kwargs):
+        captured_messages.extend(messages)
+        yield "ok"
 
-    fake_client = SimpleNamespace(
-        aio=SimpleNamespace(models=SimpleNamespace(generate_content_stream=capturing_stream))
+    monkeypatch.setattr(
+        "app.services.openrouter_client.stream_chat_completion",
+        capturing_stream,
     )
-    monkeypatch.setattr(career_mentor_agent, "_get_client", lambda: fake_client)
 
     await _collect(
         career_mentor_agent.stream_response(
@@ -270,7 +234,7 @@ async def test_stream_response_context_notes_missing_skill_gap(
         )
     )
 
-    full_prompt = _contents_text(captured_kwargs["contents"])
+    full_prompt = " ".join(m["content"] for m in captured_messages)
     assert "Not yet generated" in full_prompt
 
 
@@ -278,17 +242,17 @@ async def test_stream_response_context_notes_missing_skill_gap(
 async def test_stream_response_interview_questions_grounded_in_jd(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Interview question requests include the JD text in the prompt sent to Gemini."""
-    captured_kwargs: dict = {}
+    """Interview question requests include the JD text in the messages sent to the LLM."""
+    captured_messages: list = []
 
-    async def capturing_stream(**kwargs):
-        captured_kwargs.update(kwargs)
-        return _make_fake_stream(["1. Tell me about a REST API project."])
+    async def capturing_stream(messages, **kwargs):
+        captured_messages.extend(messages)
+        yield "1. Tell me about a REST API project."
 
-    fake_client = SimpleNamespace(
-        aio=SimpleNamespace(models=SimpleNamespace(generate_content_stream=capturing_stream))
+    monkeypatch.setattr(
+        "app.services.openrouter_client.stream_chat_completion",
+        capturing_stream,
     )
-    monkeypatch.setattr(career_mentor_agent, "_get_client", lambda: fake_client)
 
     await _collect(
         career_mentor_agent.stream_response(
@@ -298,14 +262,13 @@ async def test_stream_response_interview_questions_grounded_in_jd(
         )
     )
 
-    full_prompt = _contents_text(captured_kwargs["contents"])
-    # The JD text mentions REST APIs — it must be in the prompt.
+    full_prompt = " ".join(m["content"] for m in captured_messages)
     assert "REST API" in full_prompt
     assert "Software Engineer" in full_prompt
 
 
 # ---------------------------------------------------------------------------
-# Tests: conversation history forwarded to Gemini
+# Tests: conversation history forwarded to LLM
 # ---------------------------------------------------------------------------
 
 
@@ -313,17 +276,17 @@ async def test_stream_response_interview_questions_grounded_in_jd(
 async def test_stream_response_forwards_conversation_history(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Prior conversation turns appear in the messages list sent to Gemini."""
-    captured_kwargs: dict = {}
+    """Prior conversation turns appear in the messages list sent to the LLM."""
+    captured_messages: list = []
 
-    async def capturing_stream(**kwargs):
-        captured_kwargs.update(kwargs)
-        return _make_fake_stream(["ok"])
+    async def capturing_stream(messages, **kwargs):
+        captured_messages.extend(messages)
+        yield "ok"
 
-    fake_client = SimpleNamespace(
-        aio=SimpleNamespace(models=SimpleNamespace(generate_content_stream=capturing_stream))
+    monkeypatch.setattr(
+        "app.services.openrouter_client.stream_chat_completion",
+        capturing_stream,
     )
-    monkeypatch.setattr(career_mentor_agent, "_get_client", lambda: fake_client)
 
     await _collect(
         career_mentor_agent.stream_response(
@@ -333,37 +296,36 @@ async def test_stream_response_forwards_conversation_history(
         )
     )
 
-    contents = captured_kwargs["contents"]
-    content_texts = [_content_text(content) for content in contents]
+    contents = [m["content"] for m in captured_messages]
 
-    # Both history turns must appear.
-    assert "What is my readiness score?" in content_texts
-    assert "Your readiness score is 65/100." in content_texts
-    # The current user message must be the final Gemini content turn.
-    assert contents[-1].role == "user"
-    assert content_texts[-1] == "What should I do next?"
+    assert "What is my readiness score?" in contents
+    assert "Your readiness score is 65/100." in contents
+    # Current user message must be last.
+    assert captured_messages[-1]["role"] == "user"
+    assert captured_messages[-1]["content"] == "What should I do next?"
 
 
 # ---------------------------------------------------------------------------
-# Tests: Gemini call parameters
+# Tests: LLM call parameters
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_stream_response_uses_correct_model_and_temperature(
+async def test_stream_response_uses_correct_temperature(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The correct model name, temperature, and stream=True are passed to Gemini."""
+    """The correct temperature is passed to the OpenRouter streaming client."""
     captured_kwargs: dict = {}
 
-    async def capturing_stream(**kwargs):
+    async def capturing_stream(messages, **kwargs):
+        captured_kwargs["messages"] = messages
         captured_kwargs.update(kwargs)
-        return _make_fake_stream(["ok"])
+        yield "ok"
 
-    fake_client = SimpleNamespace(
-        aio=SimpleNamespace(models=SimpleNamespace(generate_content_stream=capturing_stream))
+    monkeypatch.setattr(
+        "app.services.openrouter_client.stream_chat_completion",
+        capturing_stream,
     )
-    monkeypatch.setattr(career_mentor_agent, "_get_client", lambda: fake_client)
 
     await _collect(
         career_mentor_agent.stream_response(
@@ -373,9 +335,8 @@ async def test_stream_response_uses_correct_model_and_temperature(
         )
     )
 
-    assert captured_kwargs["model"] == "gemini-2.5-flash"
-    assert captured_kwargs["config"].temperature == career_mentor_agent.TEMPERATURE
-    assert captured_kwargs["config"].system_instruction
+    assert captured_kwargs.get("temperature") == career_mentor_agent.TEMPERATURE
+    assert captured_kwargs["messages"][0]["role"] == "system"
 
 
 # ---------------------------------------------------------------------------
@@ -384,15 +345,19 @@ async def test_stream_response_uses_correct_model_and_temperature(
 
 
 @pytest.mark.asyncio
-async def test_stream_response_wraps_timeout_on_create(
+async def test_stream_response_wraps_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """httpx.TimeoutException raised during create is wrapped as CareerMentorTimeoutError."""
-    stream_mock = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
-    fake_client = SimpleNamespace(
-        aio=SimpleNamespace(models=SimpleNamespace(generate_content_stream=stream_mock))
+    """OpenRouterTimeoutError is wrapped as CareerMentorTimeoutError."""
+
+    async def timeout_stream(**kwargs):
+        raise OpenRouterTimeoutError("timeout")
+        yield  # make it a generator
+
+    monkeypatch.setattr(
+        "app.services.openrouter_client.stream_chat_completion",
+        timeout_stream,
     )
-    monkeypatch.setattr(career_mentor_agent, "_get_client", lambda: fake_client)
 
     with pytest.raises(career_mentor_agent.CareerMentorTimeoutError):
         await _collect(
@@ -405,17 +370,21 @@ async def test_stream_response_wraps_timeout_on_create(
 
 
 @pytest.mark.asyncio
-async def test_stream_response_wraps_connection_error_on_create(
+async def test_stream_response_wraps_server_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """errors.APIError raised during create is wrapped as GeminiRequestError."""
-    stream_mock = AsyncMock(side_effect=errors.APIError(500, {"error": {"message": "boom"}}))
-    fake_client = SimpleNamespace(
-        aio=SimpleNamespace(models=SimpleNamespace(generate_content_stream=stream_mock))
-    )
-    monkeypatch.setattr(career_mentor_agent, "_get_client", lambda: fake_client)
+    """OpenRouterServerError is wrapped as LLMRequestError."""
 
-    with pytest.raises(career_mentor_agent.GeminiRequestError):
+    async def error_stream(**kwargs):
+        raise OpenRouterServerError("server error")
+        yield  # make it a generator
+
+    monkeypatch.setattr(
+        "app.services.openrouter_client.stream_chat_completion",
+        error_stream,
+    )
+
+    with pytest.raises(career_mentor_agent.LLMRequestError):
         await _collect(
             career_mentor_agent.stream_response(
                 user_message="Hello.",

@@ -10,6 +10,16 @@ from __future__ import annotations
 
 from typing import Any
 
+_RESUME_MAX_CHARS = 5_000
+_JD_CHUNK_MAX_CHARS = 3_000  # per retrieved JD (multiple JDs are included)
+
+
+def _truncate(text: str, max_chars: int, label: str = "text") -> str:
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars] + f"\n\n[...{label} truncated to fit context window...]"
+
+
 CAREER_ADVISOR_SYSTEM_PROMPT = """\
 You are an experienced technical recruiter and career advisor. You compare a \
 candidate's resume against a set of real job descriptions the way a senior \
@@ -101,10 +111,11 @@ def _format_retrieved_job_descriptions(retrieved_job_descriptions: list[dict[str
         role_title = jd.get("role_title") or "(role title not detected)"
         chunks = jd.get("chunks", [])
         chunk_text = "\n---\n".join(chunk.strip() for chunk in chunks if chunk and chunk.strip())
+        safe_chunk = _truncate(chunk_text or "(no content retrieved)", _JD_CHUNK_MAX_CHARS, "JD content")
         blocks.append(
             f'job_description_id: "{jd_id}"\n'
             f"role_title: {role_title}\n"
-            f"retrieved content:\n{chunk_text or '(no content retrieved)'}"
+            f"retrieved content:\n{safe_chunk}"
         )
     return "\n\n===\n\n".join(blocks)
 
@@ -135,6 +146,7 @@ def build_career_advisor_user_prompt(
         else "(No resume review summary available.)"
     )
 
+    safe_resume = _truncate(resume_text.strip(), _RESUME_MAX_CHARS, "resume")
     return f"""\
 Compare the candidate's resume against ONLY the retrieved Job Descriptions \
 below and return the TOP 3 matches as strict JSON matching the schema \
@@ -142,7 +154,7 @@ described in the system prompt.
 
 CANDIDATE RESUME (full text):
 \"\"\"
-{resume_text.strip()}
+{safe_resume}
 \"\"\"
 
 RESUME REVIEW SUMMARY (optional context, not a source of new job requirements):

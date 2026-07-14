@@ -85,12 +85,14 @@ async def simulate_single_career(
             detail="Simulation generation timed out. Please try again.",
         ) from exc
     except (
-        simulation_agent.GeminiRequestError,
+        simulation_agent.LLMRequestError,
         simulation_agent.InvalidSimulationResponseError,
     ) as exc:
+        # Never mask the real agent/OpenRouter failure — the frontend surfaces
+        # `detail` via ApiError.message. A generic string made 502s undebuggable.
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="The AI service is temporarily unavailable. Please try again.",
+            detail=str(exc),
         ) from exc
 
     return record
@@ -161,7 +163,7 @@ async def simulate_all_careers(
             detail=str(exc),
         ) from exc
     except (
-        simulation_agent.GeminiRequestError,
+        simulation_agent.LLMRequestError,
         simulation_agent.InvalidSimulationResponseError,
     ) as exc:
         raise HTTPException(

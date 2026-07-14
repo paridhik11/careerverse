@@ -537,8 +537,8 @@ export function ResumeReportPage() {
             <p>Your resume has been successfully analyzed.</p>
             <p>The next step is to compare it against real job opportunities.</p>
             <p>
-              CareerVerse uses AI + RAG to compare your resume with uploaded Job
-              Descriptions and identify your Top 3 most suitable career matches.
+              CareerVerse scores your resume against a job description first,
+              then unlocks related career matches personalized to your background.
             </p>
             <p>
               This produces much more accurate recommendations than resume
@@ -551,7 +551,11 @@ export function ResumeReportPage() {
             size="lg"
             className="mt-6 text-white hover:opacity-90"
             style={{ background: "var(--cv-accent)" }}
-            onClick={() => navigate("/upload-jd", { state: { resumeId } })}
+            onClick={() =>
+              navigate("/upload-jd", {
+                state: { resumeId, report, fileName },
+              })
+            }
           >
             Upload Job Descriptions
             <ArrowRight size={16} strokeWidth={2} aria-hidden />

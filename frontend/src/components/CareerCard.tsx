@@ -1,11 +1,11 @@
 /**
  * CareerCard — Top-3 career match on a white floating Emergent-style card.
+ * Information only — action CTAs live on Virtual Experience small cards.
  */
 
 import { motion } from "framer-motion"
-import { ArrowRight, Sparkles, TrendingUp } from "lucide-react"
+import { TrendingUp } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
 import type { JobMatch } from "@/types"
 
 const CONFIDENCE_CONFIG = {
@@ -31,17 +31,21 @@ export const cardVariants = {
 
 interface CareerCardProps {
   match: JobMatch
-  onExplore: (match: JobMatch) => void
-  isExploring?: boolean
+  /** Display rank after client-side dedupe/re-rank (defaults to API rank). */
+  displayRank?: 1 | 2 | 3
 }
 
-export function CareerCard({ match, onExplore, isExploring = false }: CareerCardProps) {
+export function CareerCard({
+  match,
+  displayRank,
+}: CareerCardProps) {
   const confidence = CONFIDENCE_CONFIG[match.confidence_score]
   const skillsToShow = match.missing_skills.slice(0, 5)
+  const rank = displayRank ?? match.rank
 
   return (
     <motion.div
-      custom={match.rank}
+      custom={rank}
       variants={cardVariants}
       whileHover={{
         y: -3,
@@ -62,11 +66,11 @@ export function CareerCard({ match, onExplore, isExploring = false }: CareerCard
                 lineHeight: 1,
               }}
             >
-              {match.rank}
+              {rank}
             </span>
           </div>
           <div>
-            <span className="cv-badge mb-2">Rank {match.rank}</span>
+            <span className="cv-badge mb-2">Rank {rank}</span>
             <h2
               style={{
                 fontFamily: "var(--cv-font-serif)",
@@ -156,7 +160,7 @@ export function CareerCard({ match, onExplore, isExploring = false }: CareerCard
         </p>
       </div>
 
-      <div className="mb-4">
+      <div className={skillsToShow.length > 0 ? "mb-4" : undefined}>
         <p
           className="mb-1.5"
           style={{
@@ -183,7 +187,7 @@ export function CareerCard({ match, onExplore, isExploring = false }: CareerCard
       </div>
 
       {skillsToShow.length > 0 && (
-        <div className="mb-5">
+        <div>
           <p
             className="mb-2"
             style={{
@@ -220,30 +224,6 @@ export function CareerCard({ match, onExplore, isExploring = false }: CareerCard
           </div>
         </div>
       )}
-
-      <Button
-        type="button"
-        onClick={() => onExplore(match)}
-        disabled={isExploring}
-        className="w-full rounded-full font-semibold text-white hover:opacity-90 disabled:opacity-60"
-        style={{ background: "var(--cv-accent)" }}
-      >
-        {isExploring ? (
-          <>
-            <span className="relative flex size-3.5 shrink-0">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/60" />
-              <span className="relative inline-flex size-3.5 rounded-full bg-white" />
-            </span>
-            Preparing Experience…
-          </>
-        ) : (
-          <>
-            <Sparkles size={15} strokeWidth={2} aria-hidden />
-            Start Experience
-            <ArrowRight size={15} strokeWidth={2} aria-hidden />
-          </>
-        )}
-      </Button>
     </motion.div>
   )
 }

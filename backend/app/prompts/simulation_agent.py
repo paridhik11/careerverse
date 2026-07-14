@@ -54,6 +54,19 @@ Design decisions
 
 from __future__ import annotations
 
+# Hard limit for JD text sent to the model.
+# Keep this modest so llama-3.1-8b can finish a complete 4-task JSON object
+# without truncating mid-response (which caused InvalidSimulationResponseError → 502).
+_JD_MAX_CHARS = 5_000
+
+
+def _truncate(text: str, max_chars: int) -> str:
+    """Return text trimmed to max_chars, appending a truncation notice if cut."""
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars] + "\n\n[...JD text truncated to fit context window...]"
+
+
 SIMULATION_AGENT_SYSTEM_PROMPT = """\
 You are an expert Learning & Development designer with 10+ years of \
 hands-on experience in the target industry. You design Forage-style Virtual \
@@ -204,13 +217,14 @@ no explanation before or after. The JSON object MUST have exactly this shape:
 }
 
 CONSTRAINTS:
-- `tasks`: exactly 4 to 6 items.
+- `tasks`: exactly 4 items (not more — keeps the JSON complete).
 - `what_youll_learn`: 3 to 5 items.
 - `what_youll_do`: 3 to 5 items.
 - All evaluation scores: integers 0 to 10 inclusive.
 - Every `jd_reference` must be a verbatim or near-verbatim excerpt from the \
 provided JD text — never a paraphrase or invention.
 - Return ONLY the JSON object. Nothing else.
+- Keep resource `content` short (2–6 sentences) so the full JSON fits.
 """
 
 
@@ -230,6 +244,7 @@ def build_simulation_agent_user_prompt(role_title: str, jd_text: str) -> str:
         The full `JobDescription.parsed_text` for the matched JD — extracted
         from the uploaded PDF by the existing job description parser.
     """
+    safe_jd = _truncate(jd_text.strip(), _JD_MAX_CHARS)
     return f"""\
 Generate a Virtual Work Experience for the role below. \
 Ground every task ONLY in the Job Description text provided. \
@@ -240,10 +255,11 @@ ROLE TITLE: {role_title.strip()}
 
 FULL JOB DESCRIPTION TEXT:
 \"\"\"
-{jd_text.strip()}
+{safe_jd}
 \"\"\"
 
 Return ONLY the JSON object described in the system prompt. \
+Generate exactly 4 tasks. Keep each resource short. \
 Every task must trace back to the JD text above — never invent \
 responsibilities not present in it.
 """

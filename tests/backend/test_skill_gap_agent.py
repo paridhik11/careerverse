@@ -1,6 +1,6 @@
-"""Unit tests for the Skill Gap Analysis Agent.
+"""Unit tests for the Skill Gap Analysis Agent (OpenRouter is always mocked).
 
-Gemini is always mocked — these tests verify:
+These tests verify:
 - Valid JSON is parsed and validated correctly into SkillGapContent.
 - JSON wrapped in a markdown code fence is handled by the fallback extractor.
 - Empty JD text raises InvalidSkillGapResponseError before any API call.
@@ -8,10 +8,9 @@ Gemini is always mocked — these tests verify:
 - Malformed JSON raises InvalidSkillGapResponseError.
 - Schema violations (out-of-range score, missing required fields) raise
   InvalidSkillGapResponseError.
-- httpx.TimeoutException is wrapped as SkillGapAgentTimeoutError.
-- errors.APIError is wrapped as GeminiRequestError.
-- The model, temperature, and response_mime_type are passed to the Gemini
-  client exactly as specified.
+- OpenRouterTimeoutError is wrapped as SkillGapAgentTimeoutError.
+- OpenRouterServerError is wrapped as LLMRequestError.
+- The messages list and temperature are passed to the OpenRouter client correctly.
 - Optional inputs (resume_review_summary, simulation_metadata) are accepted
   without error.
 """
@@ -19,14 +18,12 @@ Gemini is always mocked — these tests verify:
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-import httpx
 import pytest
-from google.genai import errors
 
 from app.agents import skill_gap as skill_gap_agent
+from app.services.openrouter_client import OpenRouterServerError, OpenRouterTimeoutError
 
 # ---------------------------------------------------------------------------
 # Sample inputs
@@ -47,14 +44,12 @@ SAMPLE_RESUME = (
     "Education: BSc Computer Science."
 )
 
-# Minimal valid SkillGapContent payload.
 VALID_SKILL_GAP_JSON: dict = {
     "readiness_score": 72,
     "summary": (
         "John demonstrates solid Python and SQL skills that align well with the "
         "Data Analyst role. The primary gap is deeper Tableau proficiency and "
-        "formal cross-functional collaboration experience. Overall, John is "
-        "moderately career-ready and can close the remaining gaps within 3 months."
+        "formal cross-functional collaboration experience."
     ),
     "existing_skills": [
         "Python",
@@ -74,25 +69,15 @@ VALID_SKILL_GAP_JSON: dict = {
     "recommended_next_steps": [
         "Complete Tableau Desktop Specialist certification and build 2 portfolio dashboards.",
         "Contribute to an open-source data project to demonstrate cross-team collaboration.",
-        "Practice explaining analytical findings in non-technical language through writing or video.",
+        "Practice explaining analytical findings in non-technical language.",
     ],
 }
 
 
-# ---------------------------------------------------------------------------
-# Helpers (mirror the pattern in test_simulation_agent.py)
-# ---------------------------------------------------------------------------
-
-
-def _fake_response(content: str) -> SimpleNamespace:
-    return SimpleNamespace(text=content)
-
-
-def _install_fake_client(monkeypatch: pytest.MonkeyPatch, generate_mock: AsyncMock) -> None:
-    fake_client = SimpleNamespace(
-        aio=SimpleNamespace(models=SimpleNamespace(generate_content=generate_mock))
-    )
-    monkeypatch.setattr(skill_gap_agent, "_get_client", lambda: fake_client)
+def _mock_chat_completion(monkeypatch: pytest.MonkeyPatch, return_value: str) -> AsyncMock:
+    mock = AsyncMock(return_value=return_value)
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
+    return mock
 
 
 # ---------------------------------------------------------------------------
@@ -105,10 +90,7 @@ async def test_analyse_skill_gap_returns_valid_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Valid skill gap JSON is parsed, validated, and returned as SkillGapContent."""
-    generate_mock = AsyncMock(
-        return_value=_fake_response(json.dumps(VALID_SKILL_GAP_JSON))
-    )
-    _install_fake_client(monkeypatch, generate_mock)
+    mock = _mock_chat_completion(monkeypatch, json.dumps(VALID_SKILL_GAP_JSON))
 
     result = await skill_gap_agent.analyse_skill_gap(
         resume_text=SAMPLE_RESUME,
@@ -123,30 +105,12 @@ async def test_analyse_skill_gap_returns_valid_content(
     assert isinstance(result.missing_technical_skills, list)
     assert isinstance(result.missing_soft_skills, list)
     assert len(result.recommended_next_steps) >= 1
-
-
-@pytest.mark.asyncio
-async def test_analyse_skill_gap_calls_gemini_with_correct_params(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The correct model, temperature, and response_mime_type are passed to Gemini."""
-    generate_mock = AsyncMock(
-        return_value=_fake_response(json.dumps(VALID_SKILL_GAP_JSON))
-    )
-    _install_fake_client(monkeypatch, generate_mock)
-
-    await skill_gap_agent.analyse_skill_gap(
-        resume_text=SAMPLE_RESUME,
-        jd_text=SAMPLE_JD,
-        role_title=SAMPLE_ROLE,
-    )
-
-    generate_mock.assert_awaited_once()
-    kwargs = generate_mock.await_args.kwargs
-    assert kwargs["model"] == "gemini-2.5-flash"
-    assert isinstance(kwargs["contents"], str)
-    assert kwargs["config"].temperature == skill_gap_agent.TEMPERATURE
-    assert kwargs["config"].response_mime_type == "application/json"
+    mock.assert_awaited_once()
+    call_kwargs = mock.await_args.kwargs
+    messages = call_kwargs["messages"]
+    assert messages[0]["role"] == "system"
+    assert messages[1]["role"] == "user"
+    assert call_kwargs["temperature"] == skill_gap_agent.TEMPERATURE
 
 
 @pytest.mark.asyncio
@@ -154,10 +118,7 @@ async def test_analyse_skill_gap_accepts_optional_enrichment_inputs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The agent accepts resume_review_summary and simulation_metadata without error."""
-    generate_mock = AsyncMock(
-        return_value=_fake_response(json.dumps(VALID_SKILL_GAP_JSON))
-    )
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(VALID_SKILL_GAP_JSON))
 
     result = await skill_gap_agent.analyse_skill_gap(
         resume_text=SAMPLE_RESUME,
@@ -175,10 +136,7 @@ async def test_analyse_skill_gap_handles_empty_optional_inputs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """None values for optional inputs are handled without error."""
-    generate_mock = AsyncMock(
-        return_value=_fake_response(json.dumps(VALID_SKILL_GAP_JSON))
-    )
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(VALID_SKILL_GAP_JSON))
 
     result = await skill_gap_agent.analyse_skill_gap(
         resume_text=SAMPLE_RESUME,
@@ -197,8 +155,7 @@ async def test_analyse_skill_gap_extracts_json_from_code_fence(
 ) -> None:
     """JSON wrapped in a markdown code fence is handled by the fallback extractor."""
     fenced = f"```json\n{json.dumps(VALID_SKILL_GAP_JSON)}\n```"
-    generate_mock = AsyncMock(return_value=_fake_response(fenced))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, fenced)
 
     result = await skill_gap_agent.analyse_skill_gap(
         resume_text=SAMPLE_RESUME,
@@ -218,9 +175,9 @@ async def test_analyse_skill_gap_extracts_json_from_code_fence(
 async def test_analyse_skill_gap_raises_on_empty_jd_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An empty JD text raises InvalidSkillGapResponseError without calling Gemini."""
-    generate_mock = AsyncMock()
-    _install_fake_client(monkeypatch, generate_mock)
+    """An empty JD text raises InvalidSkillGapResponseError without calling the LLM."""
+    mock = AsyncMock()
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
     with pytest.raises(skill_gap_agent.InvalidSkillGapResponseError):
         await skill_gap_agent.analyse_skill_gap(
@@ -229,16 +186,16 @@ async def test_analyse_skill_gap_raises_on_empty_jd_text(
             role_title=SAMPLE_ROLE,
         )
 
-    generate_mock.assert_not_awaited()
+    mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_analyse_skill_gap_raises_on_whitespace_only_jd(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Whitespace-only JD text raises without calling Gemini."""
-    generate_mock = AsyncMock()
-    _install_fake_client(monkeypatch, generate_mock)
+    """Whitespace-only JD text raises without calling the LLM."""
+    mock = AsyncMock()
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
     with pytest.raises(skill_gap_agent.InvalidSkillGapResponseError):
         await skill_gap_agent.analyse_skill_gap(
@@ -247,16 +204,16 @@ async def test_analyse_skill_gap_raises_on_whitespace_only_jd(
             role_title=SAMPLE_ROLE,
         )
 
-    generate_mock.assert_not_awaited()
+    mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_analyse_skill_gap_raises_on_empty_resume_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An empty resume text raises InvalidSkillGapResponseError without calling Gemini."""
-    generate_mock = AsyncMock()
-    _install_fake_client(monkeypatch, generate_mock)
+    """An empty resume text raises InvalidSkillGapResponseError without calling the LLM."""
+    mock = AsyncMock()
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
     with pytest.raises(skill_gap_agent.InvalidSkillGapResponseError):
         await skill_gap_agent.analyse_skill_gap(
@@ -265,7 +222,7 @@ async def test_analyse_skill_gap_raises_on_empty_resume_text(
             role_title=SAMPLE_ROLE,
         )
 
-    generate_mock.assert_not_awaited()
+    mock.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
@@ -278,8 +235,7 @@ async def test_analyse_skill_gap_raises_on_malformed_json(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A non-JSON response raises InvalidSkillGapResponseError."""
-    generate_mock = AsyncMock(return_value=_fake_response("this is not json at all"))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, "this is not json at all")
 
     with pytest.raises(skill_gap_agent.InvalidSkillGapResponseError):
         await skill_gap_agent.analyse_skill_gap(
@@ -294,8 +250,7 @@ async def test_analyse_skill_gap_raises_on_empty_response(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An empty response raises InvalidSkillGapResponseError."""
-    generate_mock = AsyncMock(return_value=_fake_response(""))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, "")
 
     with pytest.raises(skill_gap_agent.InvalidSkillGapResponseError):
         await skill_gap_agent.analyse_skill_gap(
@@ -319,8 +274,7 @@ async def test_analyse_skill_gap_raises_on_out_of_range_readiness_score(
 
     bad_payload = copy.deepcopy(VALID_SKILL_GAP_JSON)
     bad_payload["readiness_score"] = 150
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(skill_gap_agent.InvalidSkillGapResponseError):
         await skill_gap_agent.analyse_skill_gap(
@@ -339,8 +293,7 @@ async def test_analyse_skill_gap_raises_on_negative_readiness_score(
 
     bad_payload = copy.deepcopy(VALID_SKILL_GAP_JSON)
     bad_payload["readiness_score"] = -1
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(skill_gap_agent.InvalidSkillGapResponseError):
         await skill_gap_agent.analyse_skill_gap(
@@ -359,8 +312,7 @@ async def test_analyse_skill_gap_raises_on_missing_summary(
 
     bad_payload = copy.deepcopy(VALID_SKILL_GAP_JSON)
     del bad_payload["summary"]
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(skill_gap_agent.InvalidSkillGapResponseError):
         await skill_gap_agent.analyse_skill_gap(
@@ -379,8 +331,7 @@ async def test_analyse_skill_gap_raises_on_missing_existing_skills(
 
     bad_payload = copy.deepcopy(VALID_SKILL_GAP_JSON)
     del bad_payload["existing_skills"]
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(skill_gap_agent.InvalidSkillGapResponseError):
         await skill_gap_agent.analyse_skill_gap(
@@ -399,8 +350,7 @@ async def test_analyse_skill_gap_raises_on_missing_recommended_next_steps(
 
     bad_payload = copy.deepcopy(VALID_SKILL_GAP_JSON)
     del bad_payload["recommended_next_steps"]
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(bad_payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(bad_payload))
 
     with pytest.raises(skill_gap_agent.InvalidSkillGapResponseError):
         await skill_gap_agent.analyse_skill_gap(
@@ -420,8 +370,7 @@ async def test_analyse_skill_gap_allows_empty_missing_skills_lists(
     payload = copy.deepcopy(VALID_SKILL_GAP_JSON)
     payload["missing_technical_skills"] = []
     payload["missing_soft_skills"] = []
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(payload))
 
     result = await skill_gap_agent.analyse_skill_gap(
         resume_text=SAMPLE_RESUME,
@@ -447,8 +396,7 @@ async def test_analyse_skill_gap_accepts_score_zero(
 
     payload = copy.deepcopy(VALID_SKILL_GAP_JSON)
     payload["readiness_score"] = 0
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(payload))
 
     result = await skill_gap_agent.analyse_skill_gap(
         resume_text=SAMPLE_RESUME,
@@ -468,8 +416,7 @@ async def test_analyse_skill_gap_accepts_score_100(
 
     payload = copy.deepcopy(VALID_SKILL_GAP_JSON)
     payload["readiness_score"] = 100
-    generate_mock = AsyncMock(return_value=_fake_response(json.dumps(payload)))
-    _install_fake_client(monkeypatch, generate_mock)
+    _mock_chat_completion(monkeypatch, json.dumps(payload))
 
     result = await skill_gap_agent.analyse_skill_gap(
         resume_text=SAMPLE_RESUME,
@@ -481,7 +428,7 @@ async def test_analyse_skill_gap_accepts_score_100(
 
 
 # ---------------------------------------------------------------------------
-# Gemini error wrapping
+# Error wrapping
 # ---------------------------------------------------------------------------
 
 
@@ -489,9 +436,9 @@ async def test_analyse_skill_gap_accepts_score_100(
 async def test_analyse_skill_gap_raises_timeout_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """httpx.TimeoutException is wrapped as SkillGapAgentTimeoutError."""
-    generate_mock = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
-    _install_fake_client(monkeypatch, generate_mock)
+    """OpenRouterTimeoutError is wrapped as SkillGapAgentTimeoutError."""
+    mock = AsyncMock(side_effect=OpenRouterTimeoutError("timeout"))
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
     with pytest.raises(skill_gap_agent.SkillGapAgentTimeoutError):
         await skill_gap_agent.analyse_skill_gap(
@@ -502,14 +449,14 @@ async def test_analyse_skill_gap_raises_timeout_error(
 
 
 @pytest.mark.asyncio
-async def test_analyse_skill_gap_raises_gemini_request_error(
+async def test_analyse_skill_gap_raises_llm_request_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """errors.APIError is wrapped as GeminiRequestError."""
-    generate_mock = AsyncMock(side_effect=errors.APIError(500, {"error": {"message": "boom"}}))
-    _install_fake_client(monkeypatch, generate_mock)
+    """OpenRouterServerError is wrapped as LLMRequestError."""
+    mock = AsyncMock(side_effect=OpenRouterServerError("server error"))
+    monkeypatch.setattr("app.services.openrouter_client.chat_completion", mock)
 
-    with pytest.raises(skill_gap_agent.GeminiRequestError):
+    with pytest.raises(skill_gap_agent.LLMRequestError):
         await skill_gap_agent.analyse_skill_gap(
             resume_text=SAMPLE_RESUME,
             jd_text=SAMPLE_JD,

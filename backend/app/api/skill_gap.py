@@ -104,7 +104,7 @@ async def create_skill_gap(
             detail=str(exc),
         ) from exc
     except (
-        skill_gap_agent.GeminiRequestError,
+        skill_gap_agent.LLMRequestError,
         skill_gap_agent.InvalidSkillGapResponseError,
     ) as exc:
         raise HTTPException(

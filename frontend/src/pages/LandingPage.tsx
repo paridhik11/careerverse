@@ -99,7 +99,7 @@ const features = [
     icon: FileText,
   },
   {
-    title: "Career Match Explorer",
+    title: "Career Explorer",
     description:
       "Compares your resume against the job descriptions you upload and ranks your top 3 career fits by match percentage.",
     colorVariant: "sage" as const,
