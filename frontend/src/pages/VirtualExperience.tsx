@@ -9,28 +9,24 @@
  *
  * Each task unlocks only after the previous is submitted.
  * Feedback is shown inline after submission, then "Continue →" advances to
- * the next task. After the final task, the finish / congratulations screen
- * is shown with "Choose This Career" and "Explore Another Career" CTAs.
+ * the next task. After the final task, a completion screen is shown.
+ *
+ * Career choice (Choose this Career) lives only on the dashboard Virtual
+ * Experience small cards — not on this expanded page.
  *
  * Data flow:
- *   CareerMatchesPage navigates here with `VirtualExperienceState` in
+ *   Dashboard / CareerMatches navigates here with VirtualExperienceState in
  *   location.state: { simulation, match, resumeId, allSimulations }.
- *
- * "Choose This Career" calls PATCH /job-matches/{jobMatchId}/choose then
- * navigates to /skill-gap.
  */
 
 import { useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import { AnimatePresence, motion } from "framer-motion"
 import {
-  AlertCircle,
   ArrowLeft,
   ArrowRight,
   Briefcase,
   Clock,
-  CheckCircle2,
-  RefreshCcw,
   Sparkles,
   Trophy,
   Users,
@@ -42,9 +38,6 @@ import { FeedbackCard } from "@/components/FeedbackCard"
 import { ProgressIndicator } from "@/components/ProgressIndicator"
 import { TaskCard } from "@/components/TaskCard"
 import { Button } from "@/components/ui/button"
-import { useJourneyProgress } from "@/contexts/JourneyProgressContext"
-import { chooseJobMatch } from "@/services/jobMatches"
-import { ApiError } from "@/services/api"
 import type { VirtualExperienceState } from "@/types"
 
 const EASE = [0.22, 1, 0.36, 1] as const
@@ -376,16 +369,10 @@ function OverviewPanel({
 
 function CongratulationsPanel({
   jobTitle,
-  onChoose,
-  onExploreAnother,
-  isChoosing,
-  chooseError,
+  onBack,
 }: {
   jobTitle: string
-  onChoose: () => void
-  onExploreAnother: () => void
-  isChoosing: boolean
-  chooseError: string | null
+  onBack: () => void
 }) {
   return (
     <motion.div
@@ -396,7 +383,6 @@ function CongratulationsPanel({
       transition={{ duration: 0.45, ease: EASE }}
       className="flex flex-col items-center gap-6 py-8 text-center"
     >
-      {/* Trophy */}
       <motion.div
         initial={{ scale: 0.5, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -421,69 +407,37 @@ function CongratulationsPanel({
             lineHeight: 1.15,
           }}
         >
-          Congratulations! 🎉
+          Experience complete
         </h1>
         <p
           className="mx-auto mt-3 max-w-md"
-          style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-body)", lineHeight: 1.7, color: "var(--cv-ink-muted)" }}
+          style={{
+            fontFamily: "var(--cv-font-sans)",
+            fontSize: "var(--cv-text-body)",
+            lineHeight: 1.7,
+            color: "var(--cv-ink-muted)",
+          }}
         >
           You have completed the{" "}
           <strong style={{ color: "var(--cv-ink)" }}>{jobTitle}</strong>{" "}
-          Virtual Work Experience.
+          Virtual Work Experience. Return to the dashboard to choose this career
+          and unlock your skill gap and learning roadmap.
         </p>
       </motion.div>
-
-      {/* Error */}
-      {chooseError && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex w-full max-w-sm items-start gap-3 rounded-[var(--cv-radius-card)] border p-4"
-          style={{ background: "rgba(239, 68, 68, 0.12)", borderColor: "rgba(239, 68, 68, 0.28)" }}
-        >
-          <AlertCircle size={16} strokeWidth={2} color="#F87171" className="mt-0.5 shrink-0" aria-hidden />
-          <p style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", color: "#FCA5A5" }}>
-            {chooseError}
-          </p>
-        </motion.div>
-      )}
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.35, ease: EASE }}
-        className="flex flex-col items-center gap-3 sm:flex-row"
       >
         <Button
           type="button"
-          onClick={onChoose}
-          disabled={isChoosing}
-          className="px-8 font-semibold text-white hover:opacity-90 disabled:opacity-60"
+          onClick={onBack}
+          className="px-8 font-semibold text-white hover:opacity-90"
           style={{ background: "var(--cv-accent)" }}
         >
-          {isChoosing ? (
-            <>
-              <span className="relative flex size-3.5 shrink-0">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/60" />
-                <span className="relative inline-flex size-3.5 rounded-full bg-white" />
-              </span>
-              Choosing…
-            </>
-          ) : (
-            <>
-              <CheckCircle2 size={16} strokeWidth={2} aria-hidden />
-              Choose This Career
-            </>
-          )}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onExploreAnother}
-          disabled={isChoosing}
-        >
-          <RefreshCcw size={15} strokeWidth={2} aria-hidden />
-          Explore Another Career
+          <ArrowLeft size={15} strokeWidth={2} aria-hidden />
+          Back to Virtual Experience
         </Button>
       </motion.div>
     </motion.div>
@@ -528,7 +482,7 @@ function MissingSimulationState() {
           className="mt-3"
           style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", lineHeight: 1.6, color: "var(--cv-ink-muted)" }}
         >
-          Please navigate here via the Career Matches page. The simulation data
+          Please navigate here via Career Explorer. The simulation data
           is session-specific and cannot be accessed directly.
         </p>
         <Button
@@ -555,27 +509,25 @@ export function VirtualExperiencePage() {
   const location = useLocation()
   const navigate = useNavigate()
   const state = location.state as VirtualExperienceState | null
-  const { setCareerChosen } = useJourneyProgress()
 
   const simulationRecord = state?.simulation
   const tasks = simulationRecord?.simulation?.tasks ?? []
   const totalTasks = tasks.length
 
-  const [activeSection, setActiveSection] = useState<SidebarSection>("overview")
+  // Skip the overview intro panel — the user already read the career details on
+  // the Career Matches cards and consciously clicked "Start Experience".
+  const [activeSection, setActiveSection] = useState<SidebarSection>(0)
   const [taskStates, setTaskStates] = useState<TaskState[]>(() =>
     tasks.map(() => ({ answer: "", isSubmitted: false }))
   )
   const [showFeedback, setShowFeedback] = useState<boolean[]>(() =>
     tasks.map(() => false)
   )
-  const [isChoosing, setIsChoosing] = useState(false)
-  const [chooseError, setChooseError] = useState<string | null>(null)
 
   if (!simulationRecord) {
     return <MissingSimulationState />
   }
 
-  const { match, resumeId } = state!
   const { simulation } = simulationRecord
 
   const completedTaskIndices = taskStates
@@ -583,10 +535,6 @@ export function VirtualExperiencePage() {
     .filter((i) => i >= 0)
 
   /* ── Handlers ─────────────────────────────────────────────────────── */
-
-  function handleStart() {
-    setActiveSection(0)
-  }
 
   function handleTaskSubmit(taskIndex: number, answer: string) {
     setTaskStates((prev) => {
@@ -610,33 +558,12 @@ export function VirtualExperiencePage() {
     }
   }
 
-  async function handleChooseCareer() {
-    setIsChoosing(true)
-    setChooseError(null)
-    try {
-      await chooseJobMatch(match.id)
-      setCareerChosen({ ...match, is_chosen: true })
-      if (state?.returnToDashboard) {
-        navigate("/dashboard#roadmap")
-      } else {
-        navigate("/skill-gap", { state: { match, resumeId } })
-      }
-    } catch (error) {
-      const message =
-        error instanceof ApiError
-          ? error.message
-          : error instanceof Error
-            ? error.message
-            : "Failed to choose this career. Please try again."
-      setChooseError(message)
-    } finally {
-      setIsChoosing(false)
+  function handleBackToDashboard() {
+    if (state?.returnToDashboard) {
+      navigate("/dashboard#virtual-experience")
+    } else {
+      navigate(-1)
     }
-  }
-
-  function handleExploreAnother() {
-    // Go back to the Career Matches page (preserves location.state for that history entry)
-    navigate(-1)
   }
 
   /* ── Current task index (when in a task section) ─────────────────── */
@@ -645,23 +572,11 @@ export function VirtualExperiencePage() {
   /* ── Main content ──────────────────────────────────────────────────── */
 
   function renderMainContent() {
-    if (activeSection === "overview") {
-      return (
-        <OverviewPanel
-          simulation={simulation}
-          onStart={handleStart}
-        />
-      )
-    }
-
     if (activeSection === "finish") {
       return (
         <CongratulationsPanel
           jobTitle={simulation.job_title}
-          onChoose={handleChooseCareer}
-          onExploreAnother={handleExploreAnother}
-          isChoosing={isChoosing}
-          chooseError={chooseError}
+          onBack={handleBackToDashboard}
         />
       )
     }
@@ -737,7 +652,7 @@ export function VirtualExperiencePage() {
           }}
         >
           <ArrowLeft size={15} strokeWidth={2} aria-hidden />
-          Back to Career Matches
+          Back to Virtual Experience
         </button>
       </motion.div>
 
@@ -757,7 +672,7 @@ export function VirtualExperiencePage() {
         {/* Main content area */}
         <div className="min-w-0 flex-1">
           {/* Progress indicator (above content on mobile, inside content on desktop) */}
-          {activeSection !== "overview" && activeSection !== "finish" && (
+          {activeSection !== "finish" && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}

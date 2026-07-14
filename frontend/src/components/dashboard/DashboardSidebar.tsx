@@ -1,36 +1,91 @@
 import {
   Briefcase,
   FileText,
+  GitCompareArrows,
   Lock,
   Map,
+  MessageCircle,
   Sparkles,
+  Target,
 } from "lucide-react"
 
 import {
   useJourneyProgress,
   type DashboardSectionId,
+  type JourneyUnlocks,
 } from "@/contexts/JourneyProgressContext"
+import { useMentorUi } from "@/contexts/MentorUiContext"
 
-type NavItem = {
-  id: DashboardSectionId
-  label: string
-  icon: typeof FileText
-  unlockKey: "resumeUpload" | "careerMatch" | "virtualExperience" | "roadmap"
-}
+type NavItem =
+  | {
+      kind: "section"
+      id: DashboardSectionId
+      label: string
+      icon: typeof FileText
+      unlockKey: keyof JourneyUnlocks
+    }
+  | {
+      kind: "mentor"
+      id: "career-mentor"
+      label: string
+      icon: typeof MessageCircle
+      unlockKey: "mentor"
+    }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "resume", label: "Resume", icon: FileText, unlockKey: "resumeUpload" },
-  { id: "career-match", label: "Career Match", icon: Briefcase, unlockKey: "careerMatch" },
-  { id: "virtual-experience", label: "Virtual Experience", icon: Sparkles, unlockKey: "virtualExperience" },
-  { id: "roadmap", label: "Roadmap", icon: Map, unlockKey: "roadmap" },
+  { kind: "section", id: "resume", label: "Resume", icon: FileText, unlockKey: "resumeUpload" },
+  {
+    kind: "section",
+    id: "resume-analysis",
+    label: "Resume Analysis",
+    icon: Target,
+    unlockKey: "resumeAnalysis",
+  },
+  {
+    kind: "section",
+    id: "career-compatibility",
+    label: "Career Compatibility",
+    icon: GitCompareArrows,
+    unlockKey: "careerCompatibility",
+  },
+  {
+    kind: "section",
+    id: "career-match",
+    label: "Career Explorer",
+    icon: Briefcase,
+    unlockKey: "careerMatch",
+  },
+  {
+    kind: "section",
+    id: "virtual-experience",
+    label: "Virtual Experience",
+    icon: Sparkles,
+    unlockKey: "virtualExperience",
+  },
+  {
+    kind: "section",
+    id: "roadmap",
+    label: "Learning Roadmap",
+    icon: Map,
+    unlockKey: "roadmap",
+  },
+  {
+    kind: "mentor",
+    id: "career-mentor",
+    label: "Career Mentor",
+    icon: MessageCircle,
+    unlockKey: "mentor",
+  },
 ]
 
 /**
- * Left sidebar — 4 journey anchors. Locked items are dimmed with a lock icon
- * and do not scroll until unlocked.
+ * Left sidebar — journey anchors. Staged unlocks:
+ * Resume → Analysis / Compatibility / Explorer → VE → Roadmap.
+ * Career Mentor is always available.
  */
 export function DashboardSidebar() {
   const { unlocks, scrollToSection } = useJourneyProgress()
+  const { openMentor } = useMentorUi()
 
   return (
     <aside
@@ -65,14 +120,21 @@ export function DashboardSidebar() {
               key={item.id}
               type="button"
               disabled={!unlocked}
-              onClick={() => unlocked && scrollToSection(item.id)}
+              onClick={() => {
+                if (!unlocked) return
+                if (item.kind === "mentor") {
+                  openMentor()
+                  return
+                }
+                scrollToSection(item.id)
+              }}
               className="flex items-center gap-3 rounded-full px-3 py-2.5 text-left transition-colors duration-150 disabled:cursor-not-allowed"
               style={{
                 fontFamily: "var(--cv-font-sans)",
                 fontSize: "var(--cv-text-small)",
                 fontWeight: unlocked ? 600 : 500,
                 color: unlocked ? "var(--cv-sidebar-active)" : "var(--cv-status-locked)",
-                background: unlocked ? "transparent" : "transparent",
+                background: "transparent",
                 opacity: unlocked ? 1 : 0.55,
               }}
               onMouseEnter={(e) => {

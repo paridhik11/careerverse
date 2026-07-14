@@ -83,9 +83,11 @@ export function ResumeUploadSection() {
         report,
         reviewedAt: new Date().toISOString(),
       })
-      setConfirmation(`“${record.file_name}” analyzed — resume report unlocked below.`)
+      setConfirmation(
+        `“${record.file_name}” analyzed — Resume Analysis, Career Compatibility, and Career Explorer are now unlocked.`,
+      )
       setPhase("done")
-      setTimeout(() => scrollToSection("resume-report"), 400)
+      setTimeout(() => scrollToSection("resume-analysis"), 400)
     } catch (error) {
       setFormError(
         error instanceof ApiError
@@ -189,14 +191,14 @@ export function ResumeUploadSection() {
                 <p style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", color: "var(--cv-ink)" }}>
                   {confirmation}
                 </p>
-                {unlocks.resumeReport && (
+                {unlocks.resumeAnalysis && (
                   <Button
                     type="button"
                     className="mt-2 rounded-full"
                     style={{ background: "var(--cv-accent)", color: "#fff" }}
-                    onClick={() => scrollToSection("resume-report")}
+                    onClick={() => scrollToSection("resume-analysis")}
                   >
-                    View report
+                    View analysis
                   </Button>
                 )}
               </motion.div>

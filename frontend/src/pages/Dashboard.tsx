@@ -1,22 +1,22 @@
 /**
- * Dashboard — one continuous scrollable journey page.
+ * Dashboard — continuous scrollable journey.
  *
- * Sections (top → bottom):
- *   Home → Resume Upload → Resume Report (+ JD choice) → Career Match
- *   → Virtual Experience → Roadmap (skill gap + 3-month plan)
+ * Sections:
+ *   Home → Resume → Resume Analysis → Career Compatibility → Career Explorer
+ *   → Virtual Experience → Learning Roadmap
  *
- * Shell: top navbar (logo, Home, mentor ring) + left sidebar anchors.
- * JourneyProgressProvider lives in App.tsx so state survives /experience hops.
+ * Career Mentor is always available via sidebar / navbar FAB.
  */
 
 import { useEffect } from "react"
 import { useLocation } from "react-router-dom"
 
+import { CareerCompatibilitySection } from "@/components/dashboard/CareerCompatibilitySection"
 import { CareerMatchSection } from "@/components/dashboard/CareerMatchSection"
 import { DashboardNavbar } from "@/components/dashboard/DashboardNavbar"
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar"
 import { HomeSection } from "@/components/dashboard/HomeSection"
-import { ResumeReportSection } from "@/components/dashboard/ResumeReportSection"
+import { ResumeAnalysisSection } from "@/components/dashboard/ResumeAnalysisSection"
 import { ResumeUploadSection } from "@/components/dashboard/ResumeUploadSection"
 import { RoadmapSection } from "@/components/dashboard/RoadmapSection"
 import { VirtualExperienceSection } from "@/components/dashboard/VirtualExperienceSection"
@@ -29,7 +29,6 @@ export function DashboardPage() {
   useEffect(() => {
     const hash = location.hash.replace("#", "")
     if (hash) {
-      // Allow layout to paint before smooth-scrolling to the target section
       requestAnimationFrame(() => {
         scrollToSection(hash as Parameters<typeof scrollToSection>[0])
       })
@@ -44,7 +43,8 @@ export function DashboardPage() {
       <main className="pt-[var(--cv-navbar-height)] lg:pl-[var(--cv-sidebar-width)]">
         <HomeSection />
         <ResumeUploadSection />
-        <ResumeReportSection />
+        <ResumeAnalysisSection />
+        <CareerCompatibilitySection />
         <CareerMatchSection />
         <VirtualExperienceSection />
         <RoadmapSection />

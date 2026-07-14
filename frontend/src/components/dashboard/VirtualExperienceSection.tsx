@@ -1,21 +1,23 @@
 /**
- * VirtualExperienceSection — wraps simulation selection + career choice.
- * Full interactive tasks still live on /experience/:resumeId/:jobMatchId;
- * this section is the dashboard gate: pick a match, open the experience, then
- * return here after choosing a career to unlock Roadmap.
+ * VirtualExperienceSection — unlocked only after Career Explorer Top 3 exists.
+ *
+ * Small cards: Start Experience + Choose this Career.
+ * Expanded /experience page never shows those buttons.
  */
 
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Loader2, Sparkles } from "lucide-react"
 
+import { EmptyJourneyState } from "@/components/dashboard/EmptyJourneyState"
 import { LockedSection } from "@/components/dashboard/LockedSection"
 import { Button } from "@/components/ui/button"
 import { useJourneyProgress } from "@/contexts/JourneyProgressContext"
 import { ApiError } from "@/services/api"
 import { chooseJobMatch } from "@/services/jobMatches"
-import { simulateAllCareers } from "@/services/simulation"
-import type { JobMatch } from "@/types"
+import { simulateSingleCareer } from "@/services/simulation"
+import type { JobMatch, JobSimulationRecord } from "@/types"
+import { getCareerRecommendationMatches } from "@/utils/resumeMatch"
 
 export function VirtualExperienceSection() {
   const navigate = useNavigate()
@@ -30,17 +32,17 @@ export function VirtualExperienceSection() {
   } = useJourneyProgress()
 
   const locked = !unlocks.virtualExperience
-  const sorted = [...matches].sort((a, b) => a.rank - b.rank)
+  const displayMatches = getCareerRecommendationMatches(matches)
+  const hasMatches = displayMatches.length > 0
 
   const [busyId, setBusyId] = useState<number | null>(null)
   const [choosingId, setChoosingId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  async function ensureSimulations() {
-    if (simulations || !resumeId) return simulations
-    const response = await simulateAllCareers(resumeId)
-    setSimulations(response.simulations)
-    return response.simulations
+  function cacheSimulation(sim: JobSimulationRecord) {
+    const prev = simulations ?? []
+    const without = prev.filter((s) => s.job_match_id !== sim.job_match_id)
+    setSimulations([...without, sim])
   }
 
   async function openExperience(match: JobMatch) {
@@ -48,15 +50,15 @@ export function VirtualExperienceSection() {
     setError(null)
     setBusyId(match.id)
     try {
-      const sims = await ensureSimulations()
-      const sim = sims?.find((s) => s.job_match_id === match.id)
-      if (!sim) throw new Error("Simulation not found for this match.")
+      const cached = simulations?.find((s) => s.job_match_id === match.id)
+      const sim = cached ?? (await simulateSingleCareer(resumeId, match.id))
+      if (!cached) cacheSimulation(sim)
       navigate(`/experience/${resumeId}/${match.id}`, {
         state: {
           simulation: sim,
           match,
           resumeId,
-          allSimulations: sims,
+          allSimulations: simulations ?? [sim],
           returnToDashboard: true,
         },
       })
@@ -98,7 +100,7 @@ export function VirtualExperienceSection() {
       id="virtual-experience"
       title="Virtual Experience"
       locked={locked}
-      lockHint="Generate career matches first, then explore a role."
+      lockHint="Open Career Explorer and generate your Top 3 careers to unlock Virtual Experience."
       className="px-6 lg:px-10"
     >
       <div className="mx-auto max-w-3xl">
@@ -134,77 +136,96 @@ export function VirtualExperienceSection() {
             lineHeight: 1.6,
           }}
         >
-          Open a full simulation for any match. When you&apos;re ready, choose one
-          career to unlock your skill gap and 3-month roadmap.
+          Open a full simulation for any recommended career. When you&apos;re ready,
+          choose one to unlock your skill gap and learning roadmap.
         </p>
 
         {error && (
-          <p className="mb-4" style={{ fontFamily: "var(--cv-font-sans)", fontSize: "var(--cv-text-small)", color: "#FCA5A5" }}>
+          <p
+            className="mb-4"
+            style={{
+              fontFamily: "var(--cv-font-sans)",
+              fontSize: "var(--cv-text-small)",
+              color: "#FCA5A5",
+            }}
+          >
             {error}
           </p>
         )}
 
-        <div className="grid gap-4 md:grid-cols-3">
-          {sorted.map((match) => {
-            const sim = simulations?.find((s) => s.job_match_id === match.id)
-            return (
-              <div
-                key={match.id}
-                className="cv-card relative flex min-h-[220px] flex-col p-5"
-              >
-                <span className="cv-badge mb-2 w-fit">Rank {match.rank}</span>
-                <h3
-                  style={{
-                    fontFamily: "var(--cv-font-serif)",
-                    fontSize: "var(--cv-text-h3)",
-                    fontWeight: 500,
-                    color: "var(--cv-ink)",
-                    lineHeight: 1.25,
-                  }}
+        {!locked && !hasMatches && (
+          <EmptyJourneyState message="Generate your Top 3 in Career Explorer first, then start an experience here." />
+        )}
+
+        {hasMatches && (
+          <div className="grid gap-4 md:grid-cols-3">
+            {displayMatches.map((match) => {
+              const sim = simulations?.find((s) => s.job_match_id === match.id)
+              return (
+                <div
+                  key={match.id}
+                  className="cv-card relative flex min-h-[220px] flex-col p-5"
                 >
-                  {match.role_title}
-                </h3>
-                <p
-                  className="mt-2 flex-1"
-                  style={{
-                    fontFamily: "var(--cv-font-sans)",
-                    fontSize: "var(--cv-text-caption)",
-                    color: "var(--cv-ink-muted)",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {sim
-                    ? `${sim.simulation.tasks.length} tasks · ${sim.simulation.estimated_duration}`
-                    : `${match.match_percent}% match · ${match.confidence_score} confidence`}
-                </p>
-                <div className="mt-4 flex flex-col gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="w-full rounded-full text-white"
-                    style={{ background: "var(--cv-accent)" }}
-                    disabled={busyId === match.id}
-                    onClick={() => openExperience(match)}
+                  <span className="cv-badge mb-2 w-fit">Rank {match.displayRank}</span>
+                  <h3
+                    style={{
+                      fontFamily: "var(--cv-font-serif)",
+                      fontSize: "var(--cv-text-h3)",
+                      fontWeight: 500,
+                      color: "var(--cv-ink)",
+                      lineHeight: 1.25,
+                    }}
                   >
-                    {busyId === match.id ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                    Start experience
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="w-full rounded-full"
-                    disabled={choosingId === match.id}
-                    onClick={() => chooseCareer(match)}
+                    {match.role_title}
+                  </h3>
+                  <p
+                    className="mt-2 flex-1"
+                    style={{
+                      fontFamily: "var(--cv-font-sans)",
+                      fontSize: "var(--cv-text-caption)",
+                      color: "var(--cv-ink-muted)",
+                      lineHeight: 1.5,
+                    }}
                   >
-                    {choosingId === match.id ? <Loader2 size={14} className="animate-spin" /> : null}
-                    Choose this career
-                  </Button>
+                    {sim
+                      ? `${sim.simulation.tasks.length} tasks · ${sim.simulation.estimated_duration}`
+                      : `${match.match_percent}% match · ${match.confidence_score} confidence`}
+                  </p>
+                  <div className="mt-4 flex flex-col gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="w-full rounded-full text-white"
+                      style={{ background: "var(--cv-accent)" }}
+                      disabled={busyId === match.id}
+                      onClick={() => openExperience(match)}
+                    >
+                      {busyId === match.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Sparkles size={14} />
+                      )}
+                      Start Experience
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="w-full rounded-full"
+                      disabled={choosingId === match.id}
+                      onClick={() => chooseCareer(match)}
+                    >
+                      {choosingId === match.id ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : null}
+                      Choose this Career
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </LockedSection>
   )

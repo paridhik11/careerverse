@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react"
 import { CheckCircle2, Loader2, Map, RefreshCw } from "lucide-react"
 
+import { EmptyJourneyState } from "@/components/dashboard/EmptyJourneyState"
 import { LockedSection } from "@/components/dashboard/LockedSection"
 import { Button } from "@/components/ui/button"
 import { useJourneyProgress } from "@/contexts/JourneyProgressContext"
@@ -72,6 +73,8 @@ export function RoadmapSection() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locked, resumeId, chosenMatch?.id])
 
+  const showEmpty = !locked && !chosenMatch
+
   const months = roadmap
     ? [
         { ...MONTH_STYLES[0], plan: roadmap.roadmap.month_1 },
@@ -83,9 +86,9 @@ export function RoadmapSection() {
   return (
     <LockedSection
       id="roadmap"
-      title="Roadmap"
+      title="Learning Roadmap"
       locked={locked}
-      lockHint="Choose a career after Virtual Experience to unlock your skill gap and learning plan."
+      lockHint="Choose a career in Virtual Experience to unlock Skill Gap and Learning Roadmap."
       className="px-6 lg:px-10 pb-24"
     >
       <div className="mx-auto max-w-3xl">
@@ -100,7 +103,7 @@ export function RoadmapSection() {
             color: "var(--cv-accent)",
           }}
         >
-          Roadmap
+          Learning roadmap
         </p>
         <h2
           style={{
@@ -123,6 +126,12 @@ export function RoadmapSection() {
           >
             Tailored for <strong style={{ color: "var(--cv-ink)" }}>{chosenMatch.role_title}</strong>
           </p>
+        )}
+
+        {showEmpty && (
+          <div className="mt-8">
+            <EmptyJourneyState message="Choose a career in Virtual Experience to unlock Skill Gap and Learning Roadmap." />
+          </div>
         )}
 
         {loading && (

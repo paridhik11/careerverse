@@ -1,14 +1,16 @@
 /**
  * JourneyProgressContext — unlock state for the continuous Dashboard scroll.
  *
- * Lock chain (each step unlocks the next):
- *   Home (always) → Resume Upload (always) → Resume Report (after review)
- *   → Career Match (after JD source chosen + matches generated)
- *   → Virtual Experience (after matches ready)
- *   → Roadmap (after a career is chosen)
+ * Unlock model (independent modules):
+ *   Before resume  → Resume only
+ *   After resume   → Resume Analysis · Career Compatibility · Career Explorer
+ *   After Top 3    → Virtual Experience
+ *   After Choose   → Learning Roadmap (includes Skill Gap)
+ *   Always         → Career Mentor
  *
- * JD choice lives inside ResumeReportSection: "own" upload or "sample" picker.
- * Selecting + confirming a JD source is what unlocks Career Match.
+ * Resume Analysis, Career Compatibility, and Career Explorer are independent.
+ * Compatibility stores a single JD score (primaryMatch) and never feeds Top 3.
+ * Explorer stores matches[] (Top 3) and is the only path that unlocks VE.
  */
 
 import {
@@ -31,7 +33,8 @@ import type { LearningRoadmapRecord } from "@/types"
 export type DashboardSectionId =
   | "home"
   | "resume"
-  | "resume-report"
+  | "resume-analysis"
+  | "career-compatibility"
   | "career-match"
   | "virtual-experience"
   | "roadmap"
@@ -40,10 +43,12 @@ export type JdSourceMode = "own" | "sample" | null
 
 export type JourneyUnlocks = {
   resumeUpload: true
-  resumeReport: boolean
+  resumeAnalysis: boolean
+  careerCompatibility: boolean
   careerMatch: boolean
   virtualExperience: boolean
   roadmap: boolean
+  mentor: true
 }
 
 type JourneyProgressValue = {
@@ -53,6 +58,8 @@ type JourneyProgressValue = {
   report: ResumeReviewReport | null
   reviewedAt: string | null
   jdSourceMode: JdSourceMode
+  selectedJdTitle: string | null
+  primaryMatch: JobMatch | null
   matches: JobMatch[]
   simulations: JobSimulationRecord[] | null
   chosenMatch: JobMatch | null
@@ -65,7 +72,11 @@ type JourneyProgressValue = {
     reviewedAt: string
   }) => void
   setJdSourceMode: (mode: JdSourceMode) => void
-  setMatchesReady: (matches: JobMatch[]) => void
+  setCompatibilityReady: (payload: {
+    selectedJdTitle: string
+    primaryMatch: JobMatch
+  }) => void
+  setExplorerReady: (payload: { matches: JobMatch[] }) => void
   setSimulations: (sims: JobSimulationRecord[]) => void
   setCareerChosen: (match: JobMatch) => void
   setSkillGap: (gap: SkillGapContent) => void
@@ -81,21 +92,29 @@ export function JourneyProgressProvider({ children }: { children: ReactNode }) {
   const [report, setReport] = useState<ResumeReviewReport | null>(null)
   const [reviewedAt, setReviewedAt] = useState<string | null>(null)
   const [jdSourceMode, setJdSourceModeState] = useState<JdSourceMode>(null)
+  const [selectedJdTitle, setSelectedJdTitle] = useState<string | null>(null)
+  const [primaryMatch, setPrimaryMatch] = useState<JobMatch | null>(null)
   const [matches, setMatches] = useState<JobMatch[]>([])
   const [simulations, setSimulationsState] = useState<JobSimulationRecord[] | null>(null)
   const [chosenMatch, setChosenMatch] = useState<JobMatch | null>(null)
   const [skillGap, setSkillGapState] = useState<SkillGapContent | null>(null)
   const [roadmap, setRoadmapState] = useState<LearningRoadmapRecord | null>(null)
 
+  const hasResume = report !== null && resumeId !== null
+  const hasTop3 = matches.length > 0
+  const hasChosenCareer = chosenMatch !== null
+
   const unlocks = useMemo<JourneyUnlocks>(
     () => ({
       resumeUpload: true,
-      resumeReport: report !== null && resumeId !== null,
-      careerMatch: matches.length > 0,
-      virtualExperience: matches.length > 0,
-      roadmap: chosenMatch !== null,
+      resumeAnalysis: hasResume,
+      careerCompatibility: hasResume,
+      careerMatch: hasResume,
+      virtualExperience: hasTop3,
+      roadmap: hasChosenCareer,
+      mentor: true,
     }),
-    [report, resumeId, matches.length, chosenMatch],
+    [hasResume, hasTop3, hasChosenCareer],
   )
 
   const setResumeComplete = useCallback(
@@ -111,6 +130,8 @@ export function JourneyProgressProvider({ children }: { children: ReactNode }) {
       setReviewedAt(payload.reviewedAt)
       // Fresh resume resets downstream journey state
       setJdSourceModeState(null)
+      setSelectedJdTitle(null)
+      setPrimaryMatch(null)
       setMatches([])
       setSimulationsState(null)
       setChosenMatch(null)
@@ -124,8 +145,18 @@ export function JourneyProgressProvider({ children }: { children: ReactNode }) {
     setJdSourceModeState(mode)
   }, [])
 
-  const setMatchesReady = useCallback((next: JobMatch[]) => {
-    setMatches(next)
+  /** Career Compatibility only — never populates Explorer Top 3. */
+  const setCompatibilityReady = useCallback(
+    (payload: { selectedJdTitle: string; primaryMatch: JobMatch }) => {
+      setSelectedJdTitle(payload.selectedJdTitle)
+      setPrimaryMatch(payload.primaryMatch)
+    },
+    [],
+  )
+
+  /** Career Explorer Top 3 — unlocks Virtual Experience. Independent of Compatibility. */
+  const setExplorerReady = useCallback((payload: { matches: JobMatch[] }) => {
+    setMatches(payload.matches)
     setSimulationsState(null)
     setChosenMatch(null)
     setSkillGapState(null)
@@ -138,6 +169,8 @@ export function JourneyProgressProvider({ children }: { children: ReactNode }) {
 
   const setCareerChosen = useCallback((match: JobMatch) => {
     setChosenMatch(match)
+    setSkillGapState(null)
+    setRoadmapState(null)
   }, [])
 
   const setSkillGap = useCallback((gap: SkillGapContent) => {
@@ -163,6 +196,8 @@ export function JourneyProgressProvider({ children }: { children: ReactNode }) {
       report,
       reviewedAt,
       jdSourceMode,
+      selectedJdTitle,
+      primaryMatch,
       matches,
       simulations,
       chosenMatch,
@@ -170,7 +205,8 @@ export function JourneyProgressProvider({ children }: { children: ReactNode }) {
       roadmap,
       setResumeComplete,
       setJdSourceMode,
-      setMatchesReady,
+      setCompatibilityReady,
+      setExplorerReady,
       setSimulations,
       setCareerChosen,
       setSkillGap,
@@ -184,6 +220,8 @@ export function JourneyProgressProvider({ children }: { children: ReactNode }) {
       report,
       reviewedAt,
       jdSourceMode,
+      selectedJdTitle,
+      primaryMatch,
       matches,
       simulations,
       chosenMatch,
@@ -191,7 +229,8 @@ export function JourneyProgressProvider({ children }: { children: ReactNode }) {
       roadmap,
       setResumeComplete,
       setJdSourceMode,
-      setMatchesReady,
+      setCompatibilityReady,
+      setExplorerReady,
       setSimulations,
       setCareerChosen,
       setSkillGap,
