@@ -1,208 +1,206 @@
-# CareerVerse AI — AI Resume & Career Advisor
+# CareerVerse AI :AI Powered Career Guidance and Resume Analysis Platform
 
-> Status:  In active development — 5-day MVP sprint. See [WORKFLOW.md](./WORKFLOW.md) for the day-by-day build plan.
+CareerVerse AI is an AI-powered web application designed to help students make better career decisions by combining resume analysis, job compatibility, career exploration, and realistic work simulations into one platform.
+Instead of only checking whether a resume looks "good", CareerVerse AI helps users understand **which careers suit their current profile, why they match those careers, what skills they still need, and what working in those roles actually feels like.**
 
-## Problem
 
-Students struggle to tailor resumes for specific job roles. They don't know how their resume actually stacks up against real job postings, what skills they're missing, or what it would actually feel like to work in the roles their resume qualifies them for.
+# Problem Statement
 
-## Core Idea
+Every year, thousands of students apply for internships and placements without fully understanding the roles they are applying for.
 
-Upload a resume → AI analyzes it and scores it → RAG retrieves matching job descriptions from uploaded JD PDFs → the **top 3 most relevant jobs** are identified → **each of the 3 gets its own job simulation** (a day in that specific role, grounded in its real JD content — not generic) so the user can actually compare what each job would feel like → user picks one as their target → deep skill gap, interview prep, and 3-month plan are generated for that chosen job.
+Many students face challenges such as:
 
----
+* Creating resumes without knowing whether they match industry expectations.
+* Applying to job roles simply because they sound interesting, without understanding the actual work involved.
+* Being confused by different job titles such as Software Engineer, Backend Engineer, Machine Learning Engineer, Platform Engineer, DevOps Engineer, Data Engineer, and many more.
+* Receiving generic career advice that is not based on their own resume or skills.
+* Not knowing which skills they should learn next to become eligible for their target career.
 
-## Features (per spec)
+A resume score alone cannot answer these questions.
 
-**Prompt Engineering**
-- Resume analysis
-- Skill gap identification
+Similarly, reading a job description rarely helps students understand what the job actually looks like in practice.
 
-**RAG**
-- Retrieve job descriptions from uploaded PDFs
-
-**Agent**
-- Resume Reviewer Agent
-- Career Advisor Agent
-
-**Output**
-- Resume score
-- Missing skills
-- Interview preparation roadmap
-
-**Stretch Goal (official)**
-- Generate a personalized 3-month learning plan
-
-**Additional stretch features** (added on top, see below) — Chat with Resume, AI Resume Rewriter, Dark Mode, Shareable Public Report, Branded PDF Export.
+CareerVerse AI was built to bridge this gap by helping students explore careers in a practical, interactive, and personalized way before they begin preparing for them.
 
 ---
 
-## Tech Stack
+# Our Solution
 
-| Layer | Choice | Why |
-|---|---|---|
-| Frontend | React + TypeScript + Vite | Fast dev loop, type safety |
-| Styling | Tailwind CSS + shadcn/ui | Premium look, fast to build |
-| Animation | Framer Motion | Polish without custom CSS |
-| Backend | FastAPI | Python-native, easy AI library integration |
-| AI | OpenAI GPT-4.1 / GPT-4o | Reasoning + agent orchestration |
-| Embeddings | text-embedding-3-small | Cheap, fast, good enough for MVP |
-| Vector DB | ChromaDB (local) | Zero-ops, migrate to cloud later |
-| Database | PostgreSQL | Users, resumes, reports, simulations |
-| Auth | Simple JWT (MVP) → Clerk (post-MVP) | Ship faster; swap in later |
-| File Storage | Supabase Storage | Resume/JD PDFs |
-| PDF Parsing | PyMuPDF | Reliable text extraction |
-| Deployment | Vercel (frontend) + Render (backend) | Free tier, zero-config CI |
+CareerVerse AI combines multiple AI-powered modules that can be used independently after uploading a resume.
 
----
+Instead of forcing users through one fixed pipeline, every module answers a different question.
 
-## Architecture
+### Resume Analysis
 
-```
-CareerVerse AI
-│
-├── Frontend (React)
-├── Backend (FastAPI)
-├── AI Layer (OpenAI + Agents)
-├── RAG (ChromaDB)
-├── Database (PostgreSQL)
-└── Deployment (Vercel + Render)
-```
+Answers:
 
-### AI Agent Pipeline
+> "How strong is my resume?"
 
-```
-Resume Reviewer Agent
-        ↓
-Career Advisor Agent  (identifies TOP 3 relevant jobs from RAG results)
-        ↓
-Job Simulation Agent  (runs once per matched job → 3 simulations, one per match)
-        ↓
-   [ user compares all 3 simulations, picks ONE target job ]
-        ↓
-Skill Gap Agent  (resume vs the chosen job's actual requirements)
-        ↓
-Interview Agent  (questions specific to the chosen job)
-```
+The resume is parsed and reviewed using AI to generate:
 
-Each agent = its own prompt file under `backend/app/prompts/`, called independently so they can be tested and improved in isolation. The Career Advisor Agent's top 3 picks are the thread every downstream agent depends on: all 3 get simulated so the user can compare, but skill gap / interview / learning plan only run once — for whichever job the user actually chooses — to keep AI cost and scope sane.
+* Resume score
+* Strengths
+* Weaknesses
+* Suggestions for improvement
 
 ---
 
-## User Journey
+### Career Compatibility
 
-```
-Landing → Login → Upload Resume → Parsing → Resume Analysis (score)
-   → Upload Job Description(s) → RAG Retrieval → Top 3 Relevant Jobs identified
-   → Job Simulations (all 3, side-by-side/tabbed) → user picks ONE target job
-   → Skill Gap (vs chosen job) → Interview Prep (for chosen job) → Final Dashboard
-```
+Answers:
 
----
+> "How well does my resume match this specific job?"
 
-## Folder Structure
+The user can:
 
-```
-careerverse-ai/
-├── frontend/
-│   └── src/
-│       ├── pages/
-│       ├── components/
-│       └── lib/
-├── backend/
-│   └── app/
-│       ├── api/          # route handlers
-│       ├── models/       # pydantic + db models
-│       ├── services/     # business logic
-│       ├── agents/       # AI agent orchestration
-│       ├── rag/          # embedding + retrieval logic
-│       ├── prompts/       # per-agent prompt templates
-│       ├── utils/
-│       └── main.py
-├── docs/
-├── data/
-├── uploads/
-├── vector_db/
-├── tests/
-├── README.md
-└── WORKFLOW.md
-```
+* Upload their own Job Description
+* Select one of the provided sample job descriptions
+
+CareerVerse AI compares the resume against the selected role and provides:
+
+* Compatibility percentage
+* Matching skills
+* Missing skills
+* Areas that require improvement
 
 ---
 
-## Screens (MVP scope)
+### Career Explorer
 
-1. Landing Page
-2. Login
-3. Dashboard
-4. Upload Resume
-5. Resume Report (score + strengths/weaknesses)
-6. Upload Job Description
-7. Top 3 Matches (RAG's top 3 picks, each with match % + reasoning)
-8. Job Simulations (tabbed/carousel — a day in each of the 3 matched jobs, then a "choose this one" action)
-9. Skill Gap (missing skills vs the chosen job)
-10. Interview Coach (questions for the chosen job)
-11. Final Report (score, missing skills, interview roadmap)
+Answers:
 
-## Official Stretch Goal — 3-Month Learning Plan
+> "Which careers am I currently best suited for?"
 
-Extends the Skill Gap Agent's output into a month-by-month plan (Month 1 / Month 2 / Month 3, each with topics + suggested resources) targeting the missing skills for the *chosen* job specifically. Low extra effort since it reuses the Skill Gap Agent's data — do this before the "additional stretch features" below if time is tight, since it's the one actually in the spec.
+Rather than evaluating only one selected job description, Career Explorer analyzes the resume as a whole and identifies the user's Top 3 career matches.
 
-## Additional Stretch Features (Day 6-7, if core + official stretch goal ship on time)
+Each recommendation includes:
 
-See [STRETCH_FEATURES.md](./STRETCH_FEATURES.md) for exact Cursor prompts.
+* Match percentage
+* Confidence level
+* Reasoning behind the recommendation
 
-- **Chat with your Resume** — RAG chatbot answering questions grounded in the user's own resume
-- **AI Resume Rewriter** — inline, accept/reject suggestions to strengthen weak bullet points
-- **Dark Mode** — full theme toggle with polished micro-animations throughout
-- **Shareable Public Report** — read-only public link for the final report, portfolio-ready
-- **Branded PDF Export** — downloadable PDF of the final report
+This allows users to discover career paths they may not have considered before.
 
 ---
 
-## Local Setup
+### Virtual Experience
 
-### Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
+Understanding a job title is very different from understanding the work done in that role.
 
-### Backend
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate      # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
+For every recommended career, CareerVerse AI generates an interactive workplace simulation based on real job responsibilities.
 
-### Environment Variables
-Create `.env` in `backend/`:
-```
-OPENAI_API_KEY=
-DATABASE_URL=
-SUPABASE_URL=
-SUPABASE_KEY=
-JWT_SECRET=
-```
+Instead of reading bullet points from a job description, users experience:
+
+* Daily responsibilities
+* Workplace decisions
+* Practical scenarios
+* Realistic tasks
+
+This helps students understand whether they would actually enjoy working in that role before spending months preparing for it.
 
 ---
 
-## Deployment
+### Skill Gap Analysis
 
-- **Frontend** → Vercel (auto-deploy on push to `main`)
-- **Backend** → Render (Docker or native Python service)
-- **Database** → Render PostgreSQL or Supabase Postgres
-- **Vector DB** → ChromaDB persisted to disk in MVP; migrate to hosted vector DB post-launch
+Once the user selects a career, CareerVerse AI compares:
+
+Resume
+
+↓
+
+Chosen Career
+
+↓
+
+Required Skills
+
+It identifies:
+
+* Missing technical skills
+* Missing tools
+* Knowledge gaps
+* Recommended improvements
 
 ---
 
-## Roadmap (post-MVP)
+### Learning Roadmap
 
-- Swap simple auth → Clerk
-- Deepen Career Simulation Agent (branching scenarios)
-- Move ChromaDB → hosted vector DB (Pinecone/Weaviate)
-- Multi-resume comparison
-- Team/recruiter view
+Based on the identified skill gaps, CareerVerse AI creates a personalized three-month learning roadmap.
+
+Instead of recommending random online courses, the roadmap focuses on preparing the user for the specific career they selected.
+
+---
+
+### Career Mentor
+
+A floating AI mentor remains available throughout the application.
+
+Users can ask career-related questions at any stage, including:
+
+* Resume advice
+* Career guidance
+* Skill recommendations
+* Technology suggestions
+* Placement preparation
+
+---
+
+# User Flow
+
+```text
+Upload Resume
+      │
+      ├────────► Resume Analysis
+      │
+      ├────────► Career Compatibility
+      │
+      └────────► Career Explorer
+                    │
+                    ▼
+            Virtual Experience
+                    │
+             Choose This Career
+                    │
+                    ▼
+      Skill Gap Analysis + Learning Roadmap
+```
+
+The first three modules are completely independent.
+
+Users can explore any of them immediately after uploading their resume.
+
+Virtual Experience becomes available after Career Explorer recommends suitable careers.
+
+Once a career is selected, Skill Gap Analysis and the personalized Learning Roadmap are unlocked.
+
+---
+
+# Features
+
+* AI Resume Analysis
+* Resume Scoring
+* Career Compatibility Checker
+* Career Explorer
+* AI Career Recommendations
+* Virtual Job Simulations
+* Skill Gap Analysis
+* Personalized Learning Roadmap
+* Career Mentor Chatbot
+* Resume-based Career Guidance
+
+---
+
+# Technology Stack
+
+| Component       | Technology                      |
+| --------------- | ------------------------------- |
+| Frontend        | React, TypeScript, Tailwind CSS |
+| Backend         | FastAPI                         |
+| Database        | PostgreSQL                      |
+| Vector Database | ChromaDB                        |
+| AI Models       | OpenRouter LLMs                 |
+| Embeddings      | Gemini Embeddings               |
+| Authentication  | JWT                             |
+| PDF Parsing     | PyMuPDF                         |
+
+---
