@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     )
 
     # OpenRouter — required for all AI agent (LLM) features. Read from .env only.
-    openrouter_api_key: str = "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"
+    openrouter_api_key: str = " "
     openrouter_model: str = "meta-llama/llama-3.1-8b-instruct"
     openrouter_referer: str = "http://localhost:5173"
     openrouter_app_name: str = "CareerVerse AI"
