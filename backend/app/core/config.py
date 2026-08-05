@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     )
 
     # OpenRouter — required for all AI agent (LLM) features. Read from .env only.
-    openrouter_api_key: str = " "
+    openrouter_api_key: str = ""
     openrouter_model: str = "meta-llama/llama-3.1-8b-instruct"
     openrouter_referer: str = "http://localhost:5173"
     openrouter_app_name: str = "CareerVerse AI"
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # Gemini — used exclusively by the RAG embedding pipeline (app.rag.embeddings).
     # LLM agent calls have been migrated to OpenRouter; this key remains only for
     # the gemini-embedding-001 text embedding model used by ChromaDB RAG.
-    gemini_api_key: str = "AQ.Ab8RN6IuQopD0IlEc_FOJ14OZwfYhvpb8yiyZ7pY_ppdaVi8vA"
+    gemini_api_key: str = ""
 
     # Empty string → SQLite fallback in app.core.database (local MVP without Postgres).
     database_url: str = ""
