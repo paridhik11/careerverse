@@ -26,6 +26,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Briefcase,
+  CheckCircle2,
   Clock,
   Sparkles,
   Trophy,
@@ -68,9 +69,12 @@ function DifficultyBadge({ difficulty }: { difficulty: string }) {
   )
 }
 
-/* ─── Overview panel ────────────────────────────────────────────────────── */
+/* ─── Overview panel ──────────────────────────────────────────────────────
+   Not rendered today (see the activeSection note below) but kept intact for
+   when the overview step is re-enabled. Exported so `noUnusedLocals` does not
+   fail the production build.                                               */
 
-function OverviewPanel({
+export function OverviewPanel({
   simulation,
   onStart,
 }: {

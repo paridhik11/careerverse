@@ -65,3 +65,7 @@ chroma.sqlite3
 # OS
 .DS_Store
 Desktop.ini
+
+# git-filter-repo secret-scrubbing artifacts (replace.txt holds the raw key)
+replace.txt
+tall git-filter-repo

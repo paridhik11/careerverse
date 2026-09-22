@@ -13,7 +13,7 @@
  *   - Respects prefers-reduced-motion (tiles become static opacity fade).
  */
 
-import { useReducedMotion, motion, animate, useMotionValue } from "framer-motion"
+import { useReducedMotion, motion, useMotionValue } from "framer-motion"
 import { useEffect, useRef } from "react"
 import {
   Code2,
